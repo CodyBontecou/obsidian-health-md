@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { lerp, hsl } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { lerp, hsl, formatDate } from "../canvas-utils";
 
 export const renderStepSpiral: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderStepSpiral: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	statsEl: HTMLElement
+	statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
@@ -77,6 +78,43 @@ export const renderStepSpiral: RenderFn = (
 			x,
 			y + dotSize / 2 + 11
 		);
+
+		hits.add({
+			shape: "circle",
+			cx: x,
+			cy: y,
+			r: Math.max(dotSize / 2 + 4, 8),
+			title: formatDate(day.date),
+			details: [
+				{ label: "Steps", value: steps.toLocaleString() },
+				{ label: "Distance", value: `${dist.toFixed(2)} km` },
+				...(day.activity!.activeCalories
+					? [
+							{
+								label: "Calories",
+								value: `${Math.round(day.activity!.activeCalories)} kcal`,
+							},
+					  ]
+					: []),
+				...(day.activity!.exerciseMinutes
+					? [
+							{
+								label: "Exercise",
+								value: `${day.activity!.exerciseMinutes} min`,
+							},
+					  ]
+					: []),
+				...(day.activity!.flightsClimbed
+					? [
+							{
+								label: "Flights",
+								value: `${day.activity!.flightsClimbed}`,
+							},
+					  ]
+					: []),
+			],
+			payload: day,
+		});
 	});
 
 	const avgSteps = Math.round(totalSteps / days.length);

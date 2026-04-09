@@ -19,6 +19,23 @@ export function lerp(a: number, b: number, t: number): number {
 	return a + (b - a) * t;
 }
 
+export function formatDate(iso: string): string {
+	const d = new Date(iso + "T00:00:00");
+	return d.toLocaleDateString("en-US", {
+		weekday: "short",
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	});
+}
+
+export function formatDuration(seconds: number): string {
+	const h = Math.floor(seconds / 3600);
+	const m = Math.round((seconds % 3600) / 60);
+	if (h === 0) return `${m}m`;
+	return `${h}h ${m}m`;
+}
+
 export function hsl(h: number, s: number, l: number): string {
 	return `hsl(${h},${s}%,${l}%)`;
 }

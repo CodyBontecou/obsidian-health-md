@@ -102,6 +102,45 @@ export interface ResolvedTheme {
 	isDark: boolean;
 }
 
+export interface HitRegionDetail {
+	label: string;
+	value: string;
+}
+
+interface HitRegionBase {
+	title: string;
+	details: HitRegionDetail[];
+	payload?: unknown;
+}
+
+export type HitRegion =
+	| (HitRegionBase & {
+			shape: "rect";
+			x: number;
+			y: number;
+			w: number;
+			h: number;
+	  })
+	| (HitRegionBase & {
+			shape: "circle";
+			cx: number;
+			cy: number;
+			r: number;
+	  })
+	| (HitRegionBase & {
+			shape: "sector";
+			cx: number;
+			cy: number;
+			r0: number;
+			r1: number;
+			a0: number;
+			a1: number;
+	  });
+
+export interface HitRegistry {
+	add(region: HitRegion): void;
+}
+
 export type RenderFn = (
 	ctx: CanvasRenderingContext2D,
 	data: HealthDay[],
@@ -109,7 +148,8 @@ export type RenderFn = (
 	h: number,
 	config: VizConfig,
 	theme: ResolvedTheme,
-	statsEl: HTMLElement
+	statsEl: HTMLElement,
+	hits: HitRegistry
 ) => void;
 
 // Special render fn for intro-stats (no canvas)

@@ -420,6 +420,21 @@ function setupCanvas(canvas, w, h) {
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
+function formatDate(iso) {
+  const d = /* @__PURE__ */ new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round(seconds % 3600 / 60);
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
 function hsl(h, s, l) {
   return `hsl(${h},${s}%,${l}%)`;
 }
@@ -446,7 +461,7 @@ function resolveTheme(setting) {
 }
 
 // src/visualizations/heart-terrain.ts
-var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl) => {
+var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   const BUCKETS = 96;
   const days = data.filter((d) => {
     var _a;
@@ -488,6 +503,32 @@ var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl) => {
       ctx.fillStyle = hsl(h, s, l);
       ctx.fillRect(x * colW, y * rowH, colW + 1, rowH + 1);
     });
+    const dayObj = days[x];
+    const samples = dayObj.heart.heartRateSamples;
+    hits.add({
+      shape: "rect",
+      x: x * colW,
+      y: 0,
+      w: colW,
+      h: H,
+      title: formatDate(day.date),
+      details: [
+        {
+          label: "Avg",
+          value: `${Math.round(dayObj.heart.averageHeartRate)} bpm`
+        },
+        {
+          label: "Min",
+          value: `${dayObj.heart.heartRateMin} bpm`
+        },
+        {
+          label: "Max",
+          value: `${dayObj.heart.heartRateMax} bpm`
+        },
+        { label: "Samples", value: `${samples.length}` }
+      ],
+      payload: dayObj
+    });
   });
   const minHR = Math.min(...days.map((d) => d.heart.heartRateMin || 999));
   const maxHR = Math.max(...days.map((d) => d.heart.heartRateMax || 0));
@@ -502,7 +543,7 @@ var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl) => {
 };
 
 // src/visualizations/sleep-polar.ts
-var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl) => {
+var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   const canvas = ctx.canvas;
   const nights = data.filter(
     (d) => {
@@ -569,6 +610,36 @@ var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl) => {
       cx,
       offsetY + cellSize - 1
     );
+    const sleep = night.sleep;
+    hits.add({
+      shape: "circle",
+      cx,
+      cy,
+      r: r + 6,
+      title: formatDate(night.date),
+      details: [
+        { label: "Total", value: formatDuration(sleep.totalDuration) },
+        { label: "Deep", value: formatDuration(sleep.deepSleep) },
+        { label: "REM", value: formatDuration(sleep.remSleep) },
+        { label: "Core", value: formatDuration(sleep.coreSleep) },
+        ...sleep.awakeTime ? [{ label: "Awake", value: formatDuration(sleep.awakeTime) }] : [],
+        {
+          label: "Bedtime",
+          value: new Date(sleep.bedtime).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit"
+          })
+        },
+        {
+          label: "Wake",
+          value: new Date(sleep.wakeTime).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit"
+          })
+        }
+      ],
+      payload: night
+    });
   });
   const actualRows = Math.ceil(nights.length / cols);
   const actualH = actualRows * (cellSize + 6) - 6;
@@ -580,7 +651,7 @@ var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl) => {
 };
 
 // src/visualizations/step-spiral.ts
-var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl) => {
+var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   const cx = W / 2, cy = H / 2;
@@ -640,6 +711,36 @@ var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl) => {
       x,
       y + dotSize / 2 + 11
     );
+    hits.add({
+      shape: "circle",
+      cx: x,
+      cy: y,
+      r: Math.max(dotSize / 2 + 4, 8),
+      title: formatDate(day.date),
+      details: [
+        { label: "Steps", value: steps.toLocaleString() },
+        { label: "Distance", value: `${dist.toFixed(2)} km` },
+        ...day.activity.activeCalories ? [
+          {
+            label: "Calories",
+            value: `${Math.round(day.activity.activeCalories)} kcal`
+          }
+        ] : [],
+        ...day.activity.exerciseMinutes ? [
+          {
+            label: "Exercise",
+            value: `${day.activity.exerciseMinutes} min`
+          }
+        ] : [],
+        ...day.activity.flightsClimbed ? [
+          {
+            label: "Flights",
+            value: `${day.activity.flightsClimbed}`
+          }
+        ] : []
+      ],
+      payload: day
+    });
   });
   const avgSteps = Math.round(totalSteps / days.length);
   statsEl.innerHTML = `
@@ -649,7 +750,7 @@ var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl) => {
 };
 
 // src/visualizations/oxygen-river.ts
-var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl) => {
+var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   const days = data.filter(
@@ -689,6 +790,29 @@ var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl) => {
     ctx.fill();
   });
   ctx.globalAlpha = 1;
+  const colW = W / days.length;
+  days.forEach((day, di) => {
+    const samples = day.vitals.bloodOxygenSamples;
+    const vals = samples.map((s) => s.value || s.percent || 0);
+    const dayMin = Math.min(...vals);
+    const dayMax = Math.max(...vals);
+    const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    hits.add({
+      shape: "rect",
+      x: di * colW,
+      y: 0,
+      w: colW,
+      h: H,
+      title: formatDate(day.date),
+      details: [
+        { label: "Avg SpO\u2082", value: `${dayAvg.toFixed(1)}%` },
+        { label: "Min", value: `${dayMin.toFixed(1)}%` },
+        { label: "Max", value: `${dayMax.toFixed(1)}%` },
+        { label: "Samples", value: `${samples.length}` }
+      ],
+      payload: day
+    });
+  });
   const avgO2 = allSamples.reduce((s, v) => s + v.value, 0) / allSamples.length;
   statsEl.innerHTML = `
 		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#4488ff">${avgO2.toFixed(1)}%</div><div class="health-md-stat-label">Avg SpO2</div></div>
@@ -698,7 +822,7 @@ var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl) => {
 };
 
 // src/visualizations/breathing-wave.ts
-var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl) => {
+var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   const days = data.filter(
@@ -746,6 +870,33 @@ var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl) => {
   ctx.strokeStyle = "#2dd4bf";
   ctx.lineWidth = 1.5;
   ctx.stroke();
+  let sampleIdx = 0;
+  days.forEach((day) => {
+    const samples = day.vitals.respiratoryRateSamples;
+    const startIdx = sampleIdx;
+    sampleIdx += samples.length;
+    const x0 = startIdx / allVals.length * W;
+    const x1 = sampleIdx / allVals.length * W;
+    const vals = samples.map((s) => s.value);
+    const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const dayMin = Math.min(...vals);
+    const dayMax = Math.max(...vals);
+    hits.add({
+      shape: "rect",
+      x: x0,
+      y: 0,
+      w: x1 - x0,
+      h: H,
+      title: formatDate(day.date),
+      details: [
+        { label: "Avg", value: `${dayAvg.toFixed(1)} br/min` },
+        { label: "Min", value: `${dayMin.toFixed(1)}` },
+        { label: "Max", value: `${dayMax.toFixed(1)}` },
+        { label: "Samples", value: `${samples.length}` }
+      ],
+      payload: day
+    });
+  });
   const avg = (allVals.reduce((a, b) => a + b, 0) / allVals.length).toFixed(
     1
   );
@@ -757,7 +908,7 @@ var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl) => {
 };
 
 // src/visualizations/vitals-rings.ts
-var renderVitalsRings = (ctx, data, W, H, _config, theme, _statsEl) => {
+var renderVitalsRings = (ctx, data, W, H, _config, theme, _statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   const cx = W / 2, cy = H / 2;
@@ -823,6 +974,28 @@ var renderVitalsRings = (ctx, data, W, H, _config, theme, _statsEl) => {
     ctx.beginPath();
     ctx.arc(dx, dy, 3, 0, Math.PI * 2);
     ctx.fill();
+    hits.add({
+      shape: "circle",
+      cx: dx,
+      cy: dy,
+      r: 8,
+      title: formatDate(day.date),
+      details: [
+        { label: "Steps", value: steps.toLocaleString() },
+        {
+          label: "Calories",
+          value: `${Math.round(cal)} kcal`
+        },
+        { label: "Resting HR", value: `${Math.round(hr)} bpm` },
+        ...day.activity.exerciseMinutes ? [
+          {
+            label: "Exercise",
+            value: `${day.activity.exerciseMinutes} min`
+          }
+        ] : []
+      ],
+      payload: day
+    });
   });
   ctx.fillStyle = theme.muted;
   ctx.font = "9px sans-serif";
@@ -832,7 +1005,7 @@ var renderVitalsRings = (ctx, data, W, H, _config, theme, _statsEl) => {
 };
 
 // src/visualizations/walking-symmetry.ts
-var renderWalkingSymmetry = (ctx, data, W, H, _config, theme, _statsEl) => {
+var renderWalkingSymmetry = (ctx, data, W, H, _config, theme, _statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
   const days = data.filter((d) => d.mobility);
@@ -870,6 +1043,32 @@ var renderWalkingSymmetry = (ctx, data, W, H, _config, theme, _statsEl) => {
     ctx.beginPath();
     ctx.roundRect(x + 1, midY, barW - 2, asymH, [0, 0, 3, 3]);
     ctx.fill();
+    const m = day.mobility;
+    hits.add({
+      shape: "rect",
+      x,
+      y: 0,
+      w: barW,
+      h: H,
+      title: formatDate(day.date),
+      details: [
+        { label: "Speed", value: `${speed.toFixed(2)} m/s` },
+        { label: "Asymmetry", value: `${asym.toFixed(1)}%` },
+        ...m.walkingStepLength ? [
+          {
+            label: "Step length",
+            value: `${m.walkingStepLength.toFixed(2)} m`
+          }
+        ] : [],
+        ...m.walkingDoubleSupportPercentage ? [
+          {
+            label: "Double support",
+            value: `${m.walkingDoubleSupportPercentage.toFixed(1)}%`
+          }
+        ] : []
+      ],
+      payload: day
+    });
   });
   ctx.strokeStyle = theme.isDark ? "#222" : "#ddd";
   ctx.lineWidth = 1;
@@ -885,7 +1084,7 @@ var renderWalkingSymmetry = (ctx, data, W, H, _config, theme, _statsEl) => {
 };
 
 // src/visualizations/sleep-architecture.ts
-var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl) => {
+var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl, hits) => {
   const canvas = ctx.canvas;
   const nights = data.filter(
     (d) => {
@@ -939,6 +1138,22 @@ var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl) => {
     ctx.beginPath();
     ctx.roundRect(labelWidth, y, barWidth, stripeHeight, 4);
     ctx.fill();
+    const nightSleep = night.sleep;
+    hits.add({
+      shape: "rect",
+      x: labelWidth,
+      y,
+      w: barWidth,
+      h: stripeHeight,
+      title: formatDate(night.date),
+      details: [
+        { label: "Total", value: formatDuration(nightSleep.totalDuration) },
+        { label: "Deep", value: formatDuration(nightSleep.deepSleep) },
+        { label: "REM", value: formatDuration(nightSleep.remSleep) },
+        { label: "Core", value: formatDuration(nightSleep.coreSleep) }
+      ],
+      payload: night
+    });
     night.sleep.sleepStages.forEach((stage) => {
       const stageStart = new Date(stage.startDate).getTime();
       const stageEnd = new Date(stage.endDate).getTime();
@@ -952,6 +1167,27 @@ var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl) => {
       ctx.fillStyle = SLEEP_COLORS[stage.stage] || "#333";
       ctx.fillRect(x, y + 2, w, stripeHeight - 4);
       ctx.shadowBlur = 0;
+      const fmtTime = (iso) => new Date(iso).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit"
+      });
+      hits.add({
+        shape: "rect",
+        x,
+        y: y + 2,
+        w,
+        h: stripeHeight - 4,
+        title: `${stage.stage.toUpperCase()} \u2014 ${formatDate(night.date)}`,
+        details: [
+          { label: "Start", value: fmtTime(stage.startDate) },
+          { label: "End", value: fmtTime(stage.endDate) },
+          {
+            label: "Duration",
+            value: formatDuration(stage.durationSeconds)
+          }
+        ],
+        payload: stage
+      });
     });
   });
 };
@@ -1034,6 +1270,46 @@ function parseConfig(source) {
   }
   return config;
 }
+function hitTest(r, x, y) {
+  if (r.shape === "rect") {
+    return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+  if (r.shape === "circle") {
+    const dx2 = x - r.cx;
+    const dy2 = y - r.cy;
+    return dx2 * dx2 + dy2 * dy2 <= r.r * r.r;
+  }
+  const dx = x - r.cx;
+  const dy = y - r.cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < r.r0 || dist > r.r1) return false;
+  if (r.a1 - r.a0 >= Math.PI * 2 - 1e-3) return true;
+  let angle = Math.atan2(dy, dx);
+  let a0 = r.a0;
+  let a1 = r.a1;
+  while (a1 <= a0) a1 += Math.PI * 2;
+  while (angle < a0) angle += Math.PI * 2;
+  return angle <= a1;
+}
+function findRegion(regions, x, y) {
+  for (let i = regions.length - 1; i >= 0; i--) {
+    if (hitTest(regions[i], x, y)) return regions[i];
+  }
+  return null;
+}
+function renderTooltipContent(tooltipEl, region) {
+  tooltipEl.empty();
+  tooltipEl.createDiv({
+    cls: "health-md-tooltip-title",
+    text: region.title
+  });
+  const body = tooltipEl.createDiv({ cls: "health-md-tooltip-details" });
+  region.details.forEach(({ label, value }) => {
+    const row = body.createDiv({ cls: "health-md-tooltip-row" });
+    row.createSpan({ cls: "health-md-tooltip-label", text: label });
+    row.createSpan({ cls: "health-md-tooltip-value", text: value });
+  });
+}
 var VizRenderChild = class extends import_obsidian2.MarkdownRenderChild {
   constructor() {
     super(...arguments);
@@ -1090,14 +1366,74 @@ async function renderCodeBlock(plugin, source, el, ctx) {
   const theme = resolveTheme(plugin.settings.theme);
   const container = el.createDiv({ cls: "health-md-container" });
   const canvas = container.createEl("canvas");
+  const tooltipEl = container.createDiv({ cls: "health-md-tooltip" });
+  tooltipEl.style.display = "none";
   const statsEl = container.createDiv({ cls: "health-md-stats" });
+  const regions = [];
+  const hits = { add: (r) => regions.push(r) };
+  let pinned = null;
+  function placeTooltip(x, y) {
+    tooltipEl.style.display = "";
+    const tw = tooltipEl.offsetWidth;
+    const th = tooltipEl.offsetHeight;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    let tx = x + 14;
+    let ty = y + 14;
+    if (tx + tw > cw) tx = x - 14 - tw;
+    if (ty + th > ch) ty = y - 14 - th;
+    if (tx < 0) tx = 0;
+    if (ty < 0) ty = 0;
+    tooltipEl.style.left = `${tx}px`;
+    tooltipEl.style.top = `${ty}px`;
+  }
+  canvas.addEventListener("mousemove", (e) => {
+    if (pinned) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const region = findRegion(regions, x, y);
+    if (region) {
+      canvas.style.cursor = "pointer";
+      renderTooltipContent(tooltipEl, region);
+      placeTooltip(x, y);
+    } else {
+      canvas.style.cursor = "";
+      tooltipEl.style.display = "none";
+    }
+  });
+  canvas.addEventListener("mouseleave", () => {
+    if (pinned) return;
+    canvas.style.cursor = "";
+    tooltipEl.style.display = "none";
+  });
+  canvas.addEventListener("click", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const region = findRegion(regions, x, y);
+    if (region) {
+      pinned = region;
+      renderTooltipContent(tooltipEl, region);
+      placeTooltip(x, y);
+    } else if (pinned) {
+      pinned = null;
+      tooltipEl.style.display = "none";
+    }
+  });
   const renderChild = new VizRenderChild(container);
   ctx.addChild(renderChild);
   function draw() {
-    const width = Math.min(container.clientWidth || defaultWidth, defaultWidth);
+    const width = Math.min(
+      container.clientWidth || defaultWidth,
+      defaultWidth
+    );
     statsEl.empty();
+    regions.length = 0;
+    pinned = null;
+    tooltipEl.style.display = "none";
     const canvasCtx = setupCanvas(canvas, width, height);
-    renderFn(canvasCtx, data, width, height, config, theme, statsEl);
+    renderFn(canvasCtx, data, width, height, config, theme, statsEl, hits);
   }
   draw();
   const observer = new ResizeObserver(() => draw());

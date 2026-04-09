@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { setupCanvas, SLEEP_COLORS } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { SLEEP_COLORS, formatDate, formatDuration } from "../canvas-utils";
 
 export const renderSleepPolar: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderSleepPolar: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	statsEl: HTMLElement
+	statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	const canvas = ctx.canvas;
 	const nights = data.filter(
@@ -87,6 +88,39 @@ export const renderSleepPolar: RenderFn = (
 			cx,
 			offsetY + cellSize - 1
 		);
+
+		const sleep = night.sleep!;
+		hits.add({
+			shape: "circle",
+			cx,
+			cy,
+			r: r + 6,
+			title: formatDate(night.date),
+			details: [
+				{ label: "Total", value: formatDuration(sleep.totalDuration) },
+				{ label: "Deep", value: formatDuration(sleep.deepSleep) },
+				{ label: "REM", value: formatDuration(sleep.remSleep) },
+				{ label: "Core", value: formatDuration(sleep.coreSleep) },
+				...(sleep.awakeTime
+					? [{ label: "Awake", value: formatDuration(sleep.awakeTime) }]
+					: []),
+				{
+					label: "Bedtime",
+					value: new Date(sleep.bedtime).toLocaleTimeString("en-US", {
+						hour: "numeric",
+						minute: "2-digit",
+					}),
+				},
+				{
+					label: "Wake",
+					value: new Date(sleep.wakeTime).toLocaleTimeString("en-US", {
+						hour: "numeric",
+						minute: "2-digit",
+					}),
+				},
+			],
+			payload: night,
+		});
 	});
 
 	// Resize canvas to actual content height

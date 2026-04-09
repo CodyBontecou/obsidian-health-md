@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { lerp } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { lerp, formatDate } from "../canvas-utils";
 
 export const renderWalkingSymmetry: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderWalkingSymmetry: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	_statsEl: HTMLElement
+	_statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
@@ -55,6 +56,37 @@ export const renderWalkingSymmetry: RenderFn = (
 		ctx.beginPath();
 		ctx.roundRect(x + 1, midY, barW - 2, asymH, [0, 0, 3, 3]);
 		ctx.fill();
+
+		const m = day.mobility!;
+		hits.add({
+			shape: "rect",
+			x,
+			y: 0,
+			w: barW,
+			h: H,
+			title: formatDate(day.date),
+			details: [
+				{ label: "Speed", value: `${speed.toFixed(2)} m/s` },
+				{ label: "Asymmetry", value: `${asym.toFixed(1)}%` },
+				...(m.walkingStepLength
+					? [
+							{
+								label: "Step length",
+								value: `${m.walkingStepLength.toFixed(2)} m`,
+							},
+					  ]
+					: []),
+				...(m.walkingDoubleSupportPercentage
+					? [
+							{
+								label: "Double support",
+								value: `${m.walkingDoubleSupportPercentage.toFixed(1)}%`,
+							},
+					  ]
+					: []),
+			],
+			payload: day,
+		});
 	});
 
 	// Center line

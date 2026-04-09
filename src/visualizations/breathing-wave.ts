@@ -1,4 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { formatDate } from "../canvas-utils";
 
 export const renderBreathingWave: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -7,7 +8,8 @@ export const renderBreathingWave: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	statsEl: HTMLElement
+	statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
@@ -61,6 +63,34 @@ export const renderBreathingWave: RenderFn = (
 	ctx.strokeStyle = "#2dd4bf";
 	ctx.lineWidth = 1.5;
 	ctx.stroke();
+
+	let sampleIdx = 0;
+	days.forEach((day) => {
+		const samples = day.vitals!.respiratoryRateSamples!;
+		const startIdx = sampleIdx;
+		sampleIdx += samples.length;
+		const x0 = (startIdx / allVals.length) * W;
+		const x1 = (sampleIdx / allVals.length) * W;
+		const vals = samples.map((s) => s.value);
+		const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+		const dayMin = Math.min(...vals);
+		const dayMax = Math.max(...vals);
+		hits.add({
+			shape: "rect",
+			x: x0,
+			y: 0,
+			w: x1 - x0,
+			h: H,
+			title: formatDate(day.date),
+			details: [
+				{ label: "Avg", value: `${dayAvg.toFixed(1)} br/min` },
+				{ label: "Min", value: `${dayMin.toFixed(1)}` },
+				{ label: "Max", value: `${dayMax.toFixed(1)}` },
+				{ label: "Samples", value: `${samples.length}` },
+			],
+			payload: day,
+		});
+	});
 
 	const avg = (allVals.reduce((a, b) => a + b, 0) / allVals.length).toFixed(
 		1

@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { lerp, hsl } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { lerp, hsl, formatDate } from "../canvas-utils";
 
 export const renderHeartTerrain: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderHeartTerrain: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	statsEl: HTMLElement
+	statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	const BUCKETS = 96;
 	const days = data.filter((d) => d.heart?.heartRateSamples);
@@ -51,6 +52,33 @@ export const renderHeartTerrain: RenderFn = (
 			const l = lerp(theme.isDark ? 12 : 30, theme.isDark ? 55 : 65, t);
 			ctx.fillStyle = hsl(h, s, l);
 			ctx.fillRect(x * colW, y * rowH, colW + 1, rowH + 1);
+		});
+
+		const dayObj = days[x];
+		const samples = dayObj.heart!.heartRateSamples;
+		hits.add({
+			shape: "rect",
+			x: x * colW,
+			y: 0,
+			w: colW,
+			h: H,
+			title: formatDate(day.date),
+			details: [
+				{
+					label: "Avg",
+					value: `${Math.round(dayObj.heart!.averageHeartRate)} bpm`,
+				},
+				{
+					label: "Min",
+					value: `${dayObj.heart!.heartRateMin} bpm`,
+				},
+				{
+					label: "Max",
+					value: `${dayObj.heart!.heartRateMax} bpm`,
+				},
+				{ label: "Samples", value: `${samples.length}` },
+			],
+			payload: dayObj,
 		});
 	});
 

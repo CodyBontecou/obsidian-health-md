@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { SLEEP_COLORS, SLEEP_GLOW } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { SLEEP_COLORS, SLEEP_GLOW, formatDate, formatDuration } from "../canvas-utils";
 
 export const renderSleepArchitecture: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderSleepArchitecture: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	_statsEl: HTMLElement
+	_statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	const canvas = ctx.canvas;
 	const nights = data.filter(
@@ -72,6 +73,24 @@ export const renderSleepArchitecture: RenderFn = (
 		ctx.roundRect(labelWidth, y, barWidth, stripeHeight, 4);
 		ctx.fill();
 
+		// Push night summary FIRST (so individual stages take priority on hit-test)
+		const nightSleep = night.sleep!;
+		hits.add({
+			shape: "rect",
+			x: labelWidth,
+			y,
+			w: barWidth,
+			h: stripeHeight,
+			title: formatDate(night.date),
+			details: [
+				{ label: "Total", value: formatDuration(nightSleep.totalDuration) },
+				{ label: "Deep", value: formatDuration(nightSleep.deepSleep) },
+				{ label: "REM", value: formatDuration(nightSleep.remSleep) },
+				{ label: "Core", value: formatDuration(nightSleep.coreSleep) },
+			],
+			payload: night,
+		});
+
 		// Sleep stages
 		night.sleep!.sleepStages.forEach((stage) => {
 			const stageStart = new Date(stage.startDate).getTime();
@@ -91,6 +110,29 @@ export const renderSleepArchitecture: RenderFn = (
 			ctx.fillRect(x, y + 2, w, stripeHeight - 4);
 
 			ctx.shadowBlur = 0;
+
+			const fmtTime = (iso: string): string =>
+				new Date(iso).toLocaleTimeString("en-US", {
+					hour: "numeric",
+					minute: "2-digit",
+				});
+			hits.add({
+				shape: "rect",
+				x,
+				y: y + 2,
+				w,
+				h: stripeHeight - 4,
+				title: `${stage.stage.toUpperCase()} — ${formatDate(night.date)}`,
+				details: [
+					{ label: "Start", value: fmtTime(stage.startDate) },
+					{ label: "End", value: fmtTime(stage.endDate) },
+					{
+						label: "Duration",
+						value: formatDuration(stage.durationSeconds),
+					},
+				],
+				payload: stage,
+			});
 		});
 	});
 };

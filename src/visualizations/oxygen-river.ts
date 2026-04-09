@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { lerp, hsl } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { lerp, hsl, formatDate } from "../canvas-utils";
 
 export const renderOxygenRiver: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderOxygenRiver: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	statsEl: HTMLElement
+	statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
@@ -50,6 +51,30 @@ export const renderOxygenRiver: RenderFn = (
 		ctx.fill();
 	});
 	ctx.globalAlpha = 1;
+
+	const colW = W / days.length;
+	days.forEach((day, di) => {
+		const samples = day.vitals!.bloodOxygenSamples!;
+		const vals = samples.map((s) => s.value || s.percent || 0);
+		const dayMin = Math.min(...vals);
+		const dayMax = Math.max(...vals);
+		const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+		hits.add({
+			shape: "rect",
+			x: di * colW,
+			y: 0,
+			w: colW,
+			h: H,
+			title: formatDate(day.date),
+			details: [
+				{ label: "Avg SpO₂", value: `${dayAvg.toFixed(1)}%` },
+				{ label: "Min", value: `${dayMin.toFixed(1)}%` },
+				{ label: "Max", value: `${dayMax.toFixed(1)}%` },
+				{ label: "Samples", value: `${samples.length}` },
+			],
+			payload: day,
+		});
+	});
 
 	const avgO2 =
 		allSamples.reduce((s, v) => s + v.value, 0) / allSamples.length;

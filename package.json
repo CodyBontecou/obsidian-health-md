@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-health-md",
-	"version": "1.0.0",
+	"version": "1.2.0",
 	"description": "Obsidian plugin for Health.md visualizations",
 	"main": "main.js",
 	"scripts": {

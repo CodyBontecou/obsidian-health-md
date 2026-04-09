@@ -1,5 +1,5 @@
-import { HealthDay, VizConfig, ResolvedTheme, RenderFn } from "../types";
-import { lerp, hsl } from "../canvas-utils";
+import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
+import { lerp, hsl, formatDate } from "../canvas-utils";
 
 export const renderVitalsRings: RenderFn = (
 	ctx: CanvasRenderingContext2D,
@@ -8,7 +8,8 @@ export const renderVitalsRings: RenderFn = (
 	H: number,
 	_config: VizConfig,
 	theme: ResolvedTheme,
-	_statsEl: HTMLElement
+	_statsEl: HTMLElement,
+	hits: HitRegistry
 ): void => {
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
@@ -94,6 +95,31 @@ export const renderVitalsRings: RenderFn = (
 		ctx.beginPath();
 		ctx.arc(dx, dy, 3, 0, Math.PI * 2);
 		ctx.fill();
+
+		hits.add({
+			shape: "circle",
+			cx: dx,
+			cy: dy,
+			r: 8,
+			title: formatDate(day.date),
+			details: [
+				{ label: "Steps", value: steps.toLocaleString() },
+				{
+					label: "Calories",
+					value: `${Math.round(cal)} kcal`,
+				},
+				{ label: "Resting HR", value: `${Math.round(hr)} bpm` },
+				...(day.activity!.exerciseMinutes
+					? [
+							{
+								label: "Exercise",
+								value: `${day.activity!.exerciseMinutes} min`,
+							},
+					  ]
+					: []),
+			],
+			payload: day,
+		});
 	});
 
 	ctx.fillStyle = theme.muted;

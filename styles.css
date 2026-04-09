@@ -1,6 +1,52 @@
 .health-md-container {
 	width: 100%;
 	margin: 8px 0;
+	position: relative;
+}
+
+.health-md-tooltip {
+	position: absolute;
+	pointer-events: none;
+	z-index: 100;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 8px 10px;
+	font-size: 0.82em;
+	min-width: 150px;
+	max-width: 240px;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+}
+
+.health-md-tooltip-title {
+	font-weight: 600;
+	margin-bottom: 6px;
+	color: var(--text-normal);
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding-bottom: 4px;
+}
+
+.health-md-tooltip-details {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.health-md-tooltip-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.health-md-tooltip-label {
+	color: var(--text-muted);
+}
+
+.health-md-tooltip-value {
+	color: var(--text-normal);
+	font-weight: 500;
 }
 
 .health-md-container canvas {
