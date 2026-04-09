@@ -1,5 +1,40 @@
 import { Vault, TFile, TFolder } from "obsidian";
-import { HealthDay, HealthMdSettings } from "./types";
+import { HealthDay, HealthMdSettings, DataFormat } from "./types";
+import { parseJSON } from "./parsers/json-parser";
+import { parseCSV } from "./parsers/csv-parser";
+import { parseMarkdown } from "./parsers/markdown-parser";
+
+const SUPPORTED_EXTENSIONS = ["json", "csv", "md"];
+
+function matchesGlob(filename: string, pattern: string): boolean {
+	if (!pattern || pattern === "*" || pattern === "*.*") return true;
+
+	// Simple glob: support * and ? wildcards
+	const regex = new RegExp(
+		"^" +
+			pattern
+				.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+				.replace(/\*/g, ".*")
+				.replace(/\?/g, ".") +
+			"$",
+		"i"
+	);
+	return regex.test(filename);
+}
+
+function detectFormat(extension: string, configFormat: DataFormat): DataFormat {
+	if (configFormat !== "auto") return configFormat;
+	switch (extension) {
+		case "json":
+			return "json";
+		case "csv":
+			return "csv";
+		case "md":
+			return "markdown"; // works for both markdown and bases (same parser)
+		default:
+			return "json";
+	}
+}
 
 export class DataLoader {
 	private cache: HealthDay[] | null = null;
@@ -16,22 +51,56 @@ export class DataLoader {
 		const folder = this.vault.getAbstractFileByPath(this.settings.dataFolder);
 		if (!(folder instanceof TFolder)) return [];
 
-		const files = folder.children.filter(
-			(f): f is TFile => f instanceof TFile && f.extension === "json"
-		);
+		const pattern = this.settings.filePattern || "*";
+		const files = folder.children.filter((f): f is TFile => {
+			if (!(f instanceof TFile)) return false;
+			if (!SUPPORTED_EXTENSIONS.includes(f.extension)) return false;
+			return matchesGlob(f.name, pattern);
+		});
 
 		const days: HealthDay[] = [];
 		for (const file of files) {
 			const content = await this.vault.cachedRead(file);
+			const format = detectFormat(file.extension, this.settings.dataFormat);
+
 			try {
-				const parsed = JSON.parse(content);
-				if (parsed.type === "health-data") days.push(parsed);
+				switch (format) {
+					case "json": {
+						const day = parseJSON(content);
+						if (day) days.push(day);
+						break;
+					}
+					case "csv": {
+						const csvDays = parseCSV(content);
+						days.push(...csvDays);
+						break;
+					}
+					case "markdown":
+					case "bases": {
+						const day = parseMarkdown(content);
+						if (day) days.push(day);
+						break;
+					}
+				}
 			} catch {
 				// skip malformed files
 			}
 		}
 
-		this.cache = days.sort((a, b) => a.date.localeCompare(b.date));
+		// Deduplicate by date (prefer the entry with more data)
+		const byDate = new Map<string, HealthDay>();
+		for (const day of days) {
+			const existing = byDate.get(day.date);
+			if (!existing) {
+				byDate.set(day.date, day);
+			} else {
+				byDate.set(day.date, mergeDays(existing, day));
+			}
+		}
+
+		this.cache = Array.from(byDate.values()).sort((a, b) =>
+			a.date.localeCompare(b.date)
+		);
 		this.lastLoad = Date.now();
 		return this.cache;
 	}
@@ -39,4 +108,20 @@ export class DataLoader {
 	invalidate(): void {
 		this.cache = null;
 	}
+}
+
+/** Merge two HealthDay objects for the same date, preferring non-null fields */
+function mergeDays(a: HealthDay, b: HealthDay): HealthDay {
+	return {
+		type: "health-data",
+		date: a.date,
+		units: a.units ?? b.units,
+		activity: a.activity ?? b.activity,
+		heart: a.heart ?? b.heart,
+		vitals: a.vitals ?? b.vitals,
+		sleep: a.sleep ?? b.sleep,
+		mobility: a.mobility ?? b.mobility,
+		workouts: a.workouts ?? b.workouts,
+		hearing: a.hearing ?? b.hearing,
+	};
 }

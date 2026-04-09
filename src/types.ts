@@ -84,8 +84,12 @@ export interface VizConfig {
 	[key: string]: string | number | undefined;
 }
 
+export type DataFormat = "auto" | "json" | "csv" | "markdown" | "bases";
+
 export interface HealthMdSettings {
 	dataFolder: string;
+	filePattern: string;
+	dataFormat: DataFormat;
 	theme: "dark" | "light" | "auto";
 	defaultWidth: number;
 	defaultHeight: number;

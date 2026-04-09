@@ -5,6 +5,8 @@ import { renderCodeBlock } from "./renderer";
 
 const DEFAULT_SETTINGS: HealthMdSettings = {
 	dataFolder: "Health",
+	filePattern: "*",
+	dataFormat: "auto",
 	theme: "auto",
 	defaultWidth: 800,
 	defaultHeight: 400,
@@ -86,13 +88,49 @@ class HealthMdSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Data folder")
-			.setDesc("Path to the folder containing daily health JSON files")
+			.setDesc("Path to the folder containing health data files")
 			.addText((text) =>
 				text
 					.setPlaceholder("Health")
 					.setValue(this.plugin.settings.dataFolder)
 					.onChange(async (value) => {
 						this.plugin.settings.dataFolder = value;
+						this.plugin.dataLoader.invalidate();
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("File pattern")
+			.setDesc(
+				"Glob pattern to match files (e.g. *.json, 2026-*.md, health-*.csv). Use * for all supported files."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("*")
+					.setValue(this.plugin.settings.filePattern)
+					.onChange(async (value) => {
+						this.plugin.settings.filePattern = value;
+						this.plugin.dataLoader.invalidate();
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Data format")
+			.setDesc(
+				"Auto-detect reads JSON, CSV, and Markdown/Bases by file extension. Or force a specific format."
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("auto", "Auto-detect by extension")
+					.addOption("json", "JSON")
+					.addOption("csv", "CSV")
+					.addOption("markdown", "Markdown (frontmatter)")
+					.addOption("bases", "Obsidian Bases (YAML frontmatter)")
+					.setValue(this.plugin.settings.dataFormat)
+					.onChange(async (value) => {
+						this.plugin.settings.dataFormat = value as HealthMdSettings["dataFormat"];
 						this.plugin.dataLoader.invalidate();
 						await this.plugin.saveSettings();
 					})

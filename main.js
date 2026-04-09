@@ -26,6 +26,302 @@ var import_obsidian3 = require("obsidian");
 
 // src/data-loader.ts
 var import_obsidian = require("obsidian");
+
+// src/parsers/json-parser.ts
+function parseJSON(content) {
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.type === "health-data" && parsed.date) return parsed;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// src/parsers/csv-parser.ts
+function parseRows(content) {
+  const lines = content.split("\n").filter((l) => l.trim());
+  if (lines.length < 2) return [];
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].split(",");
+    if (parts.length >= 5) {
+      rows.push({
+        date: parts[0].trim(),
+        category: parts[1].trim(),
+        metric: parts[2].trim(),
+        value: parts[3].trim(),
+        unit: parts[4].trim()
+      });
+    }
+  }
+  return rows;
+}
+function getNum(rows, category, metric) {
+  const row = rows.find(
+    (r) => r.category.toLowerCase() === category.toLowerCase() && r.metric.toLowerCase() === metric.toLowerCase()
+  );
+  if (!row) return void 0;
+  const num = parseFloat(row.value);
+  return isNaN(num) ? void 0 : num;
+}
+function getString(rows, category, metric) {
+  const row = rows.find(
+    (r) => r.category.toLowerCase() === category.toLowerCase() && r.metric.toLowerCase() === metric.toLowerCase()
+  );
+  return row == null ? void 0 : row.value;
+}
+function buildDayFromRows(date, rows) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+  const day = {
+    type: "health-data",
+    date
+  };
+  const steps = getNum(rows, "Activity", "Steps");
+  if (steps !== void 0) {
+    day.activity = {
+      steps,
+      walkingRunningDistanceKm: (_a = getNum(rows, "Activity", "Walking Running Distance")) != null ? _a : 0,
+      activeCalories: (_b = getNum(rows, "Activity", "Active Calories")) != null ? _b : 0,
+      exerciseMinutes: (_c = getNum(rows, "Activity", "Exercise Minutes")) != null ? _c : 0,
+      vo2Max: getNum(rows, "Activity", "VO2 Max"),
+      basalEnergyBurned: getNum(rows, "Activity", "Basal Energy Burned"),
+      standHours: getNum(rows, "Activity", "Stand Hours"),
+      flightsClimbed: getNum(rows, "Activity", "Flights Climbed")
+    };
+    const distM = getNum(rows, "Activity", "Walking Running Distance");
+    if (distM !== void 0 && distM > 100) {
+      day.activity.walkingRunningDistanceKm = distM / 1e3;
+    }
+  }
+  const restingHR = getNum(rows, "Heart", "Resting Heart Rate");
+  const avgHR = getNum(rows, "Heart", "Average Heart Rate");
+  if (restingHR !== void 0 || avgHR !== void 0) {
+    day.heart = {
+      averageHeartRate: (_d = avgHR != null ? avgHR : restingHR) != null ? _d : 0,
+      heartRateMin: (_e = getNum(rows, "Heart", "Heart Rate Min")) != null ? _e : 0,
+      heartRateMax: (_f = getNum(rows, "Heart", "Heart Rate Max")) != null ? _f : 0,
+      heartRateSamples: [],
+      restingHeartRate: restingHR,
+      walkingHeartRateAverage: getNum(rows, "Heart", "Walking Heart Rate Average"),
+      hrv: getNum(rows, "Heart", "HRV")
+    };
+  }
+  const sleepTotal = getNum(rows, "Sleep", "Total Duration");
+  if (sleepTotal !== void 0) {
+    day.sleep = {
+      sleepStages: [],
+      totalDuration: sleepTotal,
+      deepSleep: (_g = getNum(rows, "Sleep", "Deep Sleep")) != null ? _g : 0,
+      remSleep: (_h = getNum(rows, "Sleep", "REM Sleep")) != null ? _h : 0,
+      coreSleep: (_i = getNum(rows, "Sleep", "Core Sleep")) != null ? _i : 0,
+      awakeTime: getNum(rows, "Sleep", "Awake Time"),
+      bedtime: (_j = getString(rows, "Sleep", "Bedtime")) != null ? _j : "",
+      wakeTime: (_k = getString(rows, "Sleep", "Wake Time")) != null ? _k : ""
+    };
+  }
+  const respRate = getNum(rows, "Vitals", "Respiratory Rate");
+  const bloodOx = getNum(rows, "Vitals", "Blood Oxygen");
+  if (respRate !== void 0 || bloodOx !== void 0) {
+    day.vitals = {
+      respiratoryRate: respRate,
+      bloodOxygenPercent: bloodOx,
+      bloodOxygenAvg: bloodOx
+    };
+  }
+  const walkSpeed = getNum(rows, "Mobility", "Walking Speed");
+  if (walkSpeed !== void 0) {
+    day.mobility = {
+      walkingSpeed: walkSpeed,
+      walkingAsymmetryPercentage: (_l = getNum(rows, "Mobility", "Walking Asymmetry Percentage")) != null ? _l : 0,
+      walkingStepLength: getNum(rows, "Mobility", "Walking Step Length"),
+      walkingDoubleSupportPercentage: getNum(rows, "Mobility", "Walking Double Support Percentage")
+    };
+  }
+  const headphone = getNum(rows, "Hearing", "Headphone Audio Level");
+  if (headphone !== void 0) {
+    day.hearing = { headphoneAudioLevel: headphone };
+  }
+  return day;
+}
+function parseCSV(content) {
+  const rows = parseRows(content);
+  if (!rows.length) return [];
+  const byDate = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const existing = byDate.get(row.date);
+    if (existing) {
+      existing.push(row);
+    } else {
+      byDate.set(row.date, [row]);
+    }
+  }
+  const days = [];
+  for (const [date, dateRows] of byDate) {
+    days.push(buildDayFromRows(date, dateRows));
+  }
+  return days;
+}
+
+// src/parsers/markdown-parser.ts
+function parseFrontmatter(content) {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return null;
+  const yaml = match[1];
+  const result = {};
+  for (const line of yaml.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = trimmed.slice(0, colonIdx).trim();
+    let val = trimmed.slice(colonIdx + 1).trim();
+    if (!val) continue;
+    if (val.startsWith("[") && val.endsWith("]")) {
+      const inner = val.slice(1, -1);
+      result[key] = inner.split(",").map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    if (val.startsWith('"') && val.endsWith('"') || val.startsWith("'") && val.endsWith("'")) {
+      result[key] = val.slice(1, -1);
+      continue;
+    }
+    if (val === "true") {
+      result[key] = true;
+      continue;
+    }
+    if (val === "false") {
+      result[key] = false;
+      continue;
+    }
+    const num = Number(val);
+    if (!isNaN(num) && val !== "") {
+      result[key] = num;
+      continue;
+    }
+    result[key] = val;
+  }
+  return result;
+}
+function getNum2(fm, key) {
+  const v = fm[key];
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return isNaN(n) ? void 0 : n;
+  }
+  return void 0;
+}
+function getStr(fm, key) {
+  const v = fm[key];
+  return typeof v === "string" ? v : v !== void 0 ? String(v) : void 0;
+}
+function parseMarkdown(content) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
+  const fm = parseFrontmatter(content);
+  if (!fm) return null;
+  const date = getStr(fm, "date");
+  if (!date) return null;
+  const day = {
+    type: "health-data",
+    date
+  };
+  const steps = (_a = getNum2(fm, "steps")) != null ? _a : getNum2(fm, "activity_steps");
+  if (steps !== void 0) {
+    day.activity = {
+      steps,
+      walkingRunningDistanceKm: (_c = (_b = getNum2(fm, "walking_running_km")) != null ? _b : getNum2(fm, "walking_running_distance_km")) != null ? _c : 0,
+      activeCalories: (_e = (_d = getNum2(fm, "active_calories")) != null ? _d : getNum2(fm, "activity_active_calories")) != null ? _e : 0,
+      exerciseMinutes: (_g = (_f = getNum2(fm, "exercise_minutes")) != null ? _f : getNum2(fm, "activity_exercise_minutes")) != null ? _g : 0,
+      vo2Max: (_h = getNum2(fm, "vo2_max")) != null ? _h : getNum2(fm, "vo2max"),
+      basalEnergyBurned: getNum2(fm, "basal_energy_burned"),
+      standHours: getNum2(fm, "stand_hours"),
+      flightsClimbed: getNum2(fm, "flights_climbed")
+    };
+  }
+  const restingHR = (_i = getNum2(fm, "resting_heart_rate")) != null ? _i : getNum2(fm, "heart_resting_heart_rate");
+  const avgHR = (_j = getNum2(fm, "average_heart_rate")) != null ? _j : getNum2(fm, "heart_average_heart_rate");
+  const hrvVal = (_l = (_k = getNum2(fm, "hrv_ms")) != null ? _k : getNum2(fm, "hrv")) != null ? _l : getNum2(fm, "heart_hrv");
+  if (restingHR !== void 0 || avgHR !== void 0) {
+    day.heart = {
+      averageHeartRate: (_m = avgHR != null ? avgHR : restingHR) != null ? _m : 0,
+      heartRateMin: (_o = (_n = getNum2(fm, "heart_rate_min")) != null ? _n : getNum2(fm, "heart_min")) != null ? _o : 0,
+      heartRateMax: (_q = (_p = getNum2(fm, "heart_rate_max")) != null ? _p : getNum2(fm, "heart_max")) != null ? _q : 0,
+      heartRateSamples: [],
+      restingHeartRate: restingHR,
+      walkingHeartRateAverage: (_r = getNum2(fm, "walking_heart_rate")) != null ? _r : getNum2(fm, "walking_heart_rate_average"),
+      hrv: hrvVal
+    };
+  }
+  const sleepHours = getNum2(fm, "sleep_total_hours");
+  const sleepSeconds = getNum2(fm, "sleep_total_duration");
+  const sleepTotal = sleepHours !== void 0 ? sleepHours * 3600 : sleepSeconds;
+  if (sleepTotal !== void 0) {
+    const deepH = getNum2(fm, "sleep_deep_hours");
+    const remH = getNum2(fm, "sleep_rem_hours");
+    const coreH = getNum2(fm, "sleep_core_hours");
+    const awakeH = getNum2(fm, "sleep_awake_hours");
+    day.sleep = {
+      sleepStages: [],
+      totalDuration: sleepTotal,
+      deepSleep: deepH !== void 0 ? deepH * 3600 : (_s = getNum2(fm, "sleep_deep")) != null ? _s : 0,
+      remSleep: remH !== void 0 ? remH * 3600 : (_t = getNum2(fm, "sleep_rem")) != null ? _t : 0,
+      coreSleep: coreH !== void 0 ? coreH * 3600 : (_u = getNum2(fm, "sleep_core")) != null ? _u : 0,
+      awakeTime: awakeH !== void 0 ? awakeH * 3600 : getNum2(fm, "sleep_awake"),
+      bedtime: (_w = (_v = getStr(fm, "sleep_bedtime")) != null ? _v : getStr(fm, "bedtime")) != null ? _w : "",
+      wakeTime: (_y = (_x = getStr(fm, "sleep_wake")) != null ? _x : getStr(fm, "wake_time")) != null ? _y : ""
+    };
+  }
+  const respRate = (_z = getNum2(fm, "respiratory_rate")) != null ? _z : getNum2(fm, "vitals_respiratory_rate");
+  const bloodOx = (_B = (_A = getNum2(fm, "blood_oxygen")) != null ? _A : getNum2(fm, "blood_oxygen_avg")) != null ? _B : getNum2(fm, "vitals_blood_oxygen");
+  if (respRate !== void 0 || bloodOx !== void 0) {
+    day.vitals = {
+      respiratoryRate: respRate,
+      bloodOxygenPercent: bloodOx,
+      bloodOxygenAvg: bloodOx
+    };
+  }
+  const walkSpeed = (_C = getNum2(fm, "walking_speed")) != null ? _C : getNum2(fm, "mobility_walking_speed");
+  if (walkSpeed !== void 0) {
+    day.mobility = {
+      walkingSpeed: walkSpeed,
+      walkingAsymmetryPercentage: (_E = (_D = getNum2(fm, "walking_asymmetry_percentage")) != null ? _D : getNum2(fm, "walking_asymmetry")) != null ? _E : 0,
+      walkingStepLength: getNum2(fm, "walking_step_length"),
+      walkingDoubleSupportPercentage: getNum2(fm, "walking_double_support_percentage")
+    };
+  }
+  const headphone = (_F = getNum2(fm, "headphone_audio_level")) != null ? _F : getNum2(fm, "hearing_headphone_audio_level");
+  if (headphone !== void 0) {
+    day.hearing = { headphoneAudioLevel: headphone };
+  }
+  const hasData = day.activity || day.heart || day.sleep || day.vitals || day.mobility;
+  return hasData ? day : null;
+}
+
+// src/data-loader.ts
+var SUPPORTED_EXTENSIONS = ["json", "csv", "md"];
+function matchesGlob(filename, pattern) {
+  if (!pattern || pattern === "*" || pattern === "*.*") return true;
+  const regex = new RegExp(
+    "^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
+    "i"
+  );
+  return regex.test(filename);
+}
+function detectFormat(extension, configFormat) {
+  if (configFormat !== "auto") return configFormat;
+  switch (extension) {
+    case "json":
+      return "json";
+    case "csv":
+      return "csv";
+    case "md":
+      return "markdown";
+    // works for both markdown and bases (same parser)
+    default:
+      return "json";
+  }
+}
 var DataLoader = class {
   constructor(vault, settings) {
     this.vault = vault;
@@ -40,19 +336,50 @@ var DataLoader = class {
     }
     const folder = this.vault.getAbstractFileByPath(this.settings.dataFolder);
     if (!(folder instanceof import_obsidian.TFolder)) return [];
-    const files = folder.children.filter(
-      (f) => f instanceof import_obsidian.TFile && f.extension === "json"
-    );
+    const pattern = this.settings.filePattern || "*";
+    const files = folder.children.filter((f) => {
+      if (!(f instanceof import_obsidian.TFile)) return false;
+      if (!SUPPORTED_EXTENSIONS.includes(f.extension)) return false;
+      return matchesGlob(f.name, pattern);
+    });
     const days = [];
     for (const file of files) {
       const content = await this.vault.cachedRead(file);
+      const format = detectFormat(file.extension, this.settings.dataFormat);
       try {
-        const parsed = JSON.parse(content);
-        if (parsed.type === "health-data") days.push(parsed);
+        switch (format) {
+          case "json": {
+            const day = parseJSON(content);
+            if (day) days.push(day);
+            break;
+          }
+          case "csv": {
+            const csvDays = parseCSV(content);
+            days.push(...csvDays);
+            break;
+          }
+          case "markdown":
+          case "bases": {
+            const day = parseMarkdown(content);
+            if (day) days.push(day);
+            break;
+          }
+        }
       } catch (e) {
       }
     }
-    this.cache = days.sort((a, b) => a.date.localeCompare(b.date));
+    const byDate = /* @__PURE__ */ new Map();
+    for (const day of days) {
+      const existing = byDate.get(day.date);
+      if (!existing) {
+        byDate.set(day.date, day);
+      } else {
+        byDate.set(day.date, mergeDays(existing, day));
+      }
+    }
+    this.cache = Array.from(byDate.values()).sort(
+      (a, b) => a.date.localeCompare(b.date)
+    );
     this.lastLoad = Date.now();
     return this.cache;
   }
@@ -60,6 +387,21 @@ var DataLoader = class {
     this.cache = null;
   }
 };
+function mergeDays(a, b) {
+  var _a, _b, _c, _d, _e, _f, _g, _h;
+  return {
+    type: "health-data",
+    date: a.date,
+    units: (_a = a.units) != null ? _a : b.units,
+    activity: (_b = a.activity) != null ? _b : b.activity,
+    heart: (_c = a.heart) != null ? _c : b.heart,
+    vitals: (_d = a.vitals) != null ? _d : b.vitals,
+    sleep: (_e = a.sleep) != null ? _e : b.sleep,
+    mobility: (_f = a.mobility) != null ? _f : b.mobility,
+    workouts: (_g = a.workouts) != null ? _g : b.workouts,
+    hearing: (_h = a.hearing) != null ? _h : b.hearing
+  };
+}
 
 // src/renderer.ts
 var import_obsidian2 = require("obsidian");
@@ -766,6 +1108,8 @@ async function renderCodeBlock(plugin, source, el, ctx) {
 // src/main.ts
 var DEFAULT_SETTINGS = {
   dataFolder: "Health",
+  filePattern: "*",
+  dataFormat: "auto",
   theme: "auto",
   defaultWidth: 800,
   defaultHeight: 400
@@ -833,9 +1177,27 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian3.Setting(containerEl).setName("Data folder").setDesc("Path to the folder containing daily health JSON files").addText(
+    new import_obsidian3.Setting(containerEl).setName("Data folder").setDesc("Path to the folder containing health data files").addText(
       (text) => text.setPlaceholder("Health").setValue(this.plugin.settings.dataFolder).onChange(async (value) => {
         this.plugin.settings.dataFolder = value;
+        this.plugin.dataLoader.invalidate();
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian3.Setting(containerEl).setName("File pattern").setDesc(
+      "Glob pattern to match files (e.g. *.json, 2026-*.md, health-*.csv). Use * for all supported files."
+    ).addText(
+      (text) => text.setPlaceholder("*").setValue(this.plugin.settings.filePattern).onChange(async (value) => {
+        this.plugin.settings.filePattern = value;
+        this.plugin.dataLoader.invalidate();
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian3.Setting(containerEl).setName("Data format").setDesc(
+      "Auto-detect reads JSON, CSV, and Markdown/Bases by file extension. Or force a specific format."
+    ).addDropdown(
+      (dropdown) => dropdown.addOption("auto", "Auto-detect by extension").addOption("json", "JSON").addOption("csv", "CSV").addOption("markdown", "Markdown (frontmatter)").addOption("bases", "Obsidian Bases (YAML frontmatter)").setValue(this.plugin.settings.dataFormat).onChange(async (value) => {
+        this.plugin.settings.dataFormat = value;
         this.plugin.dataLoader.invalidate();
         await this.plugin.saveSettings();
       })
