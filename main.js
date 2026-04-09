@@ -897,11 +897,11 @@ var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl, hits) => {
       payload: day
     });
   });
-  const avg = (allVals.reduce((a, b) => a + b, 0) / allVals.length).toFixed(
+  const avg2 = (allVals.reduce((a, b) => a + b, 0) / allVals.length).toFixed(
     1
   );
   statsEl.innerHTML = `
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#2dd4bf">${avg}</div><div class="health-md-stat-label">Avg br/min</div></div>
+		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#2dd4bf">${avg2}</div><div class="health-md-stat-label">Avg br/min</div></div>
 		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#1a9a8a">${minR.toFixed(1)}</div><div class="health-md-stat-label">Min</div></div>
 		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#5eead4">${maxR.toFixed(1)}</div><div class="health-md-stat-label">Max</div></div>
 	`;
@@ -1270,6 +1270,284 @@ function parseConfig(source) {
   }
   return config;
 }
+var DATE_OR_DATETIME = /^(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+function toISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function parseBoundary(raw, field) {
+  const v = String(raw);
+  const m = DATE_OR_DATETIME.exec(v);
+  if (!m) {
+    return {
+      error: `Invalid "${field}" value: ${v}. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS].`
+    };
+  }
+  const date = m[1];
+  if (!m[2]) return { date, label: v };
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms)) {
+    return { error: `Invalid "${field}" datetime: ${v}.` };
+  }
+  return { date, ms, label: v };
+}
+function resolveDateRange(config) {
+  const fromRaw = config.from;
+  const toRaw = config.to;
+  const lastRaw = config.last;
+  const range = {};
+  if (fromRaw !== void 0) {
+    const parsed = parseBoundary(fromRaw, "from");
+    if ("error" in parsed) return { error: parsed.error };
+    range.fromDate = parsed.date;
+    range.fromMs = parsed.ms;
+    range.fromLabel = parsed.label;
+  }
+  if (toRaw !== void 0) {
+    const parsed = parseBoundary(toRaw, "to");
+    if ("error" in parsed) return { error: parsed.error };
+    range.toDate = parsed.date;
+    range.toMs = parsed.ms;
+    range.toLabel = parsed.label;
+  }
+  if (lastRaw !== void 0) {
+    const n = typeof lastRaw === "number" ? lastRaw : Number(lastRaw);
+    if (!Number.isFinite(n) || n <= 0) {
+      return { error: `Invalid "last": ${lastRaw}. Use a positive number of days.` };
+    }
+    const anchor = range.toDate ? /* @__PURE__ */ new Date(range.toDate + "T00:00:00") : /* @__PURE__ */ new Date();
+    const start = new Date(anchor);
+    start.setDate(start.getDate() - (Math.floor(n) - 1));
+    range.fromDate = toISODate(start);
+    range.fromMs = void 0;
+    range.fromLabel = range.fromDate;
+    if (!range.toDate) {
+      range.toDate = toISODate(anchor);
+      range.toLabel = range.toDate;
+    }
+  }
+  if (range.fromDate && range.toDate) {
+    if (range.fromDate > range.toDate || range.fromDate === range.toDate && range.fromMs !== void 0 && range.toMs !== void 0 && range.fromMs > range.toMs) {
+      return {
+        error: `"from" (${range.fromLabel}) is after "to" (${range.toLabel}).`
+      };
+    }
+  }
+  return range;
+}
+function sliceTimestamped(arr, fromMs, toMs) {
+  if (!arr) return arr;
+  return arr.filter((s) => {
+    const ms = Date.parse(s.timestamp);
+    if (Number.isNaN(ms)) return true;
+    if (fromMs !== void 0 && ms < fromMs) return false;
+    if (toMs !== void 0 && ms > toMs) return false;
+    return true;
+  });
+}
+function avg(nums) {
+  let sum = 0;
+  for (const n of nums) sum += n;
+  return sum / nums.length;
+}
+function sampleValues(arr) {
+  const out = [];
+  for (const s of arr) {
+    if (Number.isFinite(s.value)) out.push(s.value);
+  }
+  return out;
+}
+function recomputeHeart(original, sliced) {
+  var _a, _b;
+  const next = { ...sliced };
+  const hadHrSamples = !!original.heartRateSamples && original.heartRateSamples.length > 0;
+  if (hadHrSamples) {
+    const values = sampleValues((_a = sliced.heartRateSamples) != null ? _a : []);
+    if (values.length) {
+      next.averageHeartRate = avg(values);
+      next.heartRateMin = Math.min(...values);
+      next.heartRateMax = Math.max(...values);
+    } else {
+      next.averageHeartRate = 0;
+      next.heartRateMin = 0;
+      next.heartRateMax = 0;
+    }
+  }
+  const hadHrvSamples = !!original.hrvSamples && original.hrvSamples.length > 0;
+  if (hadHrvSamples) {
+    const values = sampleValues((_b = sliced.hrvSamples) != null ? _b : []);
+    next.hrv = values.length ? avg(values) : void 0;
+  }
+  return next;
+}
+function recomputeVitals(original, sliced) {
+  var _a, _b;
+  const next = { ...sliced };
+  const hadOxSamples = !!original.bloodOxygenSamples && original.bloodOxygenSamples.length > 0;
+  if (hadOxSamples) {
+    const values = sampleValues((_a = sliced.bloodOxygenSamples) != null ? _a : []);
+    if (values.length) {
+      const a = avg(values);
+      next.bloodOxygenAvg = a;
+      next.bloodOxygenMin = Math.min(...values);
+      next.bloodOxygenMax = Math.max(...values);
+      next.bloodOxygenPercent = a;
+    } else {
+      next.bloodOxygenAvg = void 0;
+      next.bloodOxygenMin = void 0;
+      next.bloodOxygenMax = void 0;
+      next.bloodOxygenPercent = void 0;
+    }
+  }
+  const hadRespSamples = !!original.respiratoryRateSamples && original.respiratoryRateSamples.length > 0;
+  if (hadRespSamples) {
+    const values = sampleValues((_b = sliced.respiratoryRateSamples) != null ? _b : []);
+    if (values.length) {
+      const a = avg(values);
+      next.respiratoryRateAvg = a;
+      next.respiratoryRateMin = Math.min(...values);
+      next.respiratoryRateMax = Math.max(...values);
+      next.respiratoryRate = a;
+    } else {
+      next.respiratoryRateAvg = void 0;
+      next.respiratoryRateMin = void 0;
+      next.respiratoryRateMax = void 0;
+      next.respiratoryRate = void 0;
+    }
+  }
+  return next;
+}
+function recomputeSleep(original, sliced) {
+  if (!original.sleepStages || original.sleepStages.length === 0) {
+    return sliced;
+  }
+  let deep = 0;
+  let rem = 0;
+  let core = 0;
+  let awake = 0;
+  let hasAwake = false;
+  let firstStartMs = Infinity;
+  let lastEndMs = -Infinity;
+  let bedtime = "";
+  let wakeTime = "";
+  for (const s of sliced.sleepStages) {
+    const stage = s.stage.toLowerCase();
+    const dur = s.durationSeconds || 0;
+    if (stage === "deep") deep += dur;
+    else if (stage === "rem") rem += dur;
+    else if (stage === "core" || stage === "light") core += dur;
+    else if (stage === "awake") {
+      awake += dur;
+      hasAwake = true;
+    }
+    const startMs = Date.parse(s.startDate);
+    if (Number.isFinite(startMs) && startMs < firstStartMs) {
+      firstStartMs = startMs;
+      bedtime = s.startDate;
+    }
+    const endMs = Date.parse(s.endDate);
+    if (Number.isFinite(endMs) && endMs > lastEndMs) {
+      lastEndMs = endMs;
+      wakeTime = s.endDate;
+    }
+  }
+  const total = deep + rem + core;
+  const next = {
+    ...sliced,
+    totalDuration: total,
+    totalDurationFormatted: formatDuration(total),
+    deepSleep: deep,
+    deepSleepFormatted: formatDuration(deep),
+    remSleep: rem,
+    remSleepFormatted: formatDuration(rem),
+    coreSleep: core,
+    coreSleepFormatted: formatDuration(core),
+    bedtime: bedtime || sliced.bedtime,
+    wakeTime: wakeTime || sliced.wakeTime
+  };
+  if (hasAwake) {
+    next.awakeTime = awake;
+    next.awakeTimeFormatted = formatDuration(awake);
+  }
+  return next;
+}
+function sliceBoundaryDay(d, fromMs, toMs) {
+  var _a;
+  const next = { ...d };
+  if (d.heart) {
+    const sliced = {
+      ...d.heart,
+      heartRateSamples: (_a = sliceTimestamped(d.heart.heartRateSamples, fromMs, toMs)) != null ? _a : [],
+      hrvSamples: sliceTimestamped(d.heart.hrvSamples, fromMs, toMs)
+    };
+    next.heart = recomputeHeart(d.heart, sliced);
+  }
+  if (d.vitals) {
+    const sliced = {
+      ...d.vitals,
+      bloodOxygenSamples: sliceTimestamped(
+        d.vitals.bloodOxygenSamples,
+        fromMs,
+        toMs
+      ),
+      respiratoryRateSamples: sliceTimestamped(
+        d.vitals.respiratoryRateSamples,
+        fromMs,
+        toMs
+      )
+    };
+    next.vitals = recomputeVitals(d.vitals, sliced);
+  }
+  if (d.sleep) {
+    const sliced = {
+      ...d.sleep,
+      sleepStages: d.sleep.sleepStages.filter((s) => {
+        const ms = Date.parse(s.startDate);
+        if (Number.isNaN(ms)) return true;
+        if (fromMs !== void 0 && ms < fromMs) return false;
+        if (toMs !== void 0 && ms > toMs) return false;
+        return true;
+      })
+    };
+    next.sleep = recomputeSleep(d.sleep, sliced);
+  }
+  if (d.workouts) {
+    next.workouts = d.workouts.filter((w) => {
+      if (!w.startTime) return true;
+      const ms = Date.parse(w.startTime);
+      if (Number.isNaN(ms)) return true;
+      if (fromMs !== void 0 && ms < fromMs) return false;
+      if (toMs !== void 0 && ms > toMs) return false;
+      return true;
+    });
+  }
+  return next;
+}
+function filterByDateRange(data, range) {
+  if (!range.fromDate && !range.toDate) return data;
+  const result = [];
+  for (const d of data) {
+    if (range.fromDate && d.date < range.fromDate) continue;
+    if (range.toDate && d.date > range.toDate) continue;
+    const sliceFrom = range.fromMs !== void 0 && d.date === range.fromDate ? range.fromMs : void 0;
+    const sliceTo = range.toMs !== void 0 && d.date === range.toDate ? range.toMs : void 0;
+    if (sliceFrom !== void 0 || sliceTo !== void 0) {
+      result.push(sliceBoundaryDay(d, sliceFrom, sliceTo));
+    } else {
+      result.push(d);
+    }
+  }
+  return result;
+}
+function describeRange(range) {
+  if (range.fromLabel && range.toLabel)
+    return `${range.fromLabel} to ${range.toLabel}`;
+  if (range.fromLabel) return `from ${range.fromLabel}`;
+  if (range.toLabel) return `up to ${range.toLabel}`;
+  return "";
+}
 function hitTest(r, x, y) {
   if (r.shape === "rect") {
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -1333,11 +1611,23 @@ async function renderCodeBlock(plugin, source, el, ctx) {
     });
     return;
   }
+  const range = resolveDateRange(config);
+  if (range.error) {
+    el.createEl("p", { text: range.error, cls: "health-md-error" });
+    return;
+  }
   if (config.type === "intro-stats") {
-    const data2 = await plugin.dataLoader.load();
-    if (!data2.length) {
+    const allData2 = await plugin.dataLoader.load();
+    if (!allData2.length) {
       el.createEl("p", {
         text: `No health data found in ${plugin.settings.dataFolder}/`
+      });
+      return;
+    }
+    const data2 = filterByDateRange(allData2, range);
+    if (!data2.length) {
+      el.createEl("p", {
+        text: `No health data in range (${describeRange(range)}).`
       });
       return;
     }
@@ -1354,10 +1644,17 @@ async function renderCodeBlock(plugin, source, el, ctx) {
     });
     return;
   }
-  const data = await plugin.dataLoader.load();
-  if (!data.length) {
+  const allData = await plugin.dataLoader.load();
+  if (!allData.length) {
     el.createEl("p", {
       text: `No health data found in ${plugin.settings.dataFolder}/`
+    });
+    return;
+  }
+  const data = filterByDateRange(allData, range);
+  if (!data.length) {
+    el.createEl("p", {
+      text: `No health data in range (${describeRange(range)}).`
     });
     return;
   }
