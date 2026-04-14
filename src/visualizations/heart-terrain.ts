@@ -12,7 +12,7 @@ export const renderHeartTerrain: RenderFn = (
 	hits: HitRegistry
 ): void => {
 	const BUCKETS = 96;
-	const days = data.filter((d) => d.heart?.heartRateSamples);
+	const days = data.filter((d) => d.heart?.heartRateSamples?.length);
 	const grid: Array<{ date: string; col: (number | null)[] }> = [];
 	let minBPM = 999,
 		maxBPM = 0;
@@ -39,6 +39,11 @@ export const renderHeartTerrain: RenderFn = (
 		});
 		grid.push({ date: day.date, col: averaged });
 	});
+
+	if (grid.length === 0) {
+		statsEl.innerHTML = `<p style="color:var(--text-muted)">Heart terrain requires timestamped heart rate samples. This data is only available in JSON format.</p>`;
+		return;
+	}
 
 	const colW = W / grid.length;
 	const rowH = H / BUCKETS;
