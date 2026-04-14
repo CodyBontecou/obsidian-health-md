@@ -211,6 +211,7 @@ export function parseMarkdown(content: string): HealthDay | null {
 			walkingSpeed: walkSpeed,
 			walkingAsymmetryPercentage:
 				getNum(fm, "walking_asymmetry_percentage") ??
+				getNum(fm, "walking_asymmetry_percent") ??
 				getNum(fm, "walking_asymmetry") ??
 				0,
 			walkingStepLength: getNum(fm, "walking_step_length"),

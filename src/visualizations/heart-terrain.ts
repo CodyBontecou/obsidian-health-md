@@ -41,7 +41,51 @@ export const renderHeartTerrain: RenderFn = (
 	});
 
 	if (grid.length === 0) {
-		statsEl.innerHTML = `<p style="color:var(--text-muted)">Heart terrain requires timestamped heart rate samples. This data is only available in JSON format.</p>`;
+		// Fallback: per-day average heatmap when no timestamped samples are available
+		const heartDays = data.filter((d) => d.heart && d.heart.averageHeartRate > 0);
+		if (!heartDays.length) {
+			statsEl.innerHTML = `<p style="color:var(--text-muted)">No heart rate data available.</p>`;
+			return;
+		}
+		const allAvg = heartDays.map((d) => d.heart!.averageHeartRate);
+		const globalMin = Math.min(...heartDays.map((d) => d.heart!.heartRateMin || d.heart!.averageHeartRate));
+		const globalMax = Math.max(...heartDays.map((d) => d.heart!.heartRateMax || d.heart!.averageHeartRate));
+		const colW = W / heartDays.length;
+		heartDays.forEach((day, x) => {
+			const avg = day.heart!.averageHeartRate;
+			const lo = day.heart!.heartRateMin || avg;
+			const hi = day.heart!.heartRateMax || avg;
+			// Draw a gradient column: bottom = min (blue), top = max (red), center = avg
+			const grad = ctx.createLinearGradient(0, H, 0, 0);
+			const tLo = (lo - globalMin) / (globalMax - globalMin || 1);
+			const tHi = (hi - globalMin) / (globalMax - globalMin || 1);
+			const tAvg = (avg - globalMin) / (globalMax - globalMin || 1);
+			grad.addColorStop(0, `hsl(${lerp(220, 0, tLo)},70%,${theme.isDark ? 30 : 45}%)`);
+			grad.addColorStop(0.5, `hsl(${lerp(220, 0, tAvg)},80%,${theme.isDark ? 45 : 55}%)`);
+			grad.addColorStop(1, `hsl(${lerp(220, 0, tHi)},90%,${theme.isDark ? 55 : 65}%)`);
+			ctx.fillStyle = grad;
+			ctx.fillRect(x * colW, 0, colW + 1, H);
+			hits.add({
+				shape: "rect",
+				x: x * colW,
+				y: 0,
+				w: colW,
+				h: H,
+				title: formatDate(day.date),
+				details: [
+					{ label: "Avg", value: `${Math.round(avg)} bpm` },
+					{ label: "Min", value: `${lo} bpm` },
+					{ label: "Max", value: `${hi} bpm` },
+				],
+				payload: day,
+			});
+		});
+		const overallAvg = Math.round(allAvg.reduce((a, b) => a + b, 0) / allAvg.length);
+		statsEl.innerHTML = `
+			<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#4488ff">${globalMin}</div><div class="health-md-stat-label">Lowest</div></div>
+			<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#cc6666">${overallAvg}</div><div class="health-md-stat-label">Average</div></div>
+			<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#ff4444">${globalMax}</div><div class="health-md-stat-label">Highest</div></div>
+		`;
 		return;
 	}
 

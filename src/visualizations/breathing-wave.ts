@@ -1,6 +1,22 @@
 import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
 import { formatDate } from "../canvas-utils";
 
+function getRespiratoryValues(day: HealthDay): number[] {
+	if (day.vitals?.respiratoryRateSamples?.length) {
+		return day.vitals.respiratoryRateSamples.map((s) => s.value);
+	}
+	const avg = day.vitals?.respiratoryRate ?? day.vitals?.respiratoryRateAvg;
+	if (avg !== undefined) {
+		const min = day.vitals?.respiratoryRateMin;
+		const max = day.vitals?.respiratoryRateMax;
+		if (min !== undefined && max !== undefined && min !== max) {
+			return [min, avg, max];
+		}
+		return [avg];
+	}
+	return [];
+}
+
 export const renderBreathingWave: RenderFn = (
 	ctx: CanvasRenderingContext2D,
 	data: HealthDay[],
@@ -14,11 +30,7 @@ export const renderBreathingWave: RenderFn = (
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
 
-	const days = data.filter(
-		(d) =>
-			d.vitals?.respiratoryRateSamples &&
-			d.vitals.respiratoryRateSamples.length > 0
-	);
+	const days = data.filter((d) => getRespiratoryValues(d).length > 0);
 	if (!days.length) {
 		ctx.fillStyle = theme.muted;
 		ctx.font = "12px sans-serif";
@@ -28,11 +40,7 @@ export const renderBreathingWave: RenderFn = (
 	}
 
 	const allVals: number[] = [];
-	days.forEach((day) =>
-		day.vitals!.respiratoryRateSamples!.forEach((s) =>
-			allVals.push(s.value)
-		)
-	);
+	days.forEach((day) => allVals.push(...getRespiratoryValues(day)));
 	const minR = Math.min(...allVals);
 	const maxR = Math.max(...allVals);
 
@@ -66,12 +74,11 @@ export const renderBreathingWave: RenderFn = (
 
 	let sampleIdx = 0;
 	days.forEach((day) => {
-		const samples = day.vitals!.respiratoryRateSamples!;
+		const vals = getRespiratoryValues(day);
 		const startIdx = sampleIdx;
-		sampleIdx += samples.length;
+		sampleIdx += vals.length;
 		const x0 = (startIdx / allVals.length) * W;
 		const x1 = (sampleIdx / allVals.length) * W;
-		const vals = samples.map((s) => s.value);
 		const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
 		const dayMin = Math.min(...vals);
 		const dayMax = Math.max(...vals);
@@ -86,7 +93,7 @@ export const renderBreathingWave: RenderFn = (
 				{ label: "Avg", value: `${dayAvg.toFixed(1)} br/min` },
 				{ label: "Min", value: `${dayMin.toFixed(1)}` },
 				{ label: "Max", value: `${dayMax.toFixed(1)}` },
-				{ label: "Samples", value: `${samples.length}` },
+				{ label: "Samples", value: `${vals.length}` },
 			],
 			payload: day,
 		});

@@ -217,7 +217,7 @@ function getStr(fm, key) {
   return typeof v === "string" ? v : v !== void 0 ? String(v) : void 0;
 }
 function parseMarkdown(content) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G;
   const fm = parseFrontmatter(content);
   if (!fm) return null;
   const date = getStr(fm, "date");
@@ -285,12 +285,12 @@ function parseMarkdown(content) {
   if (walkSpeed !== void 0) {
     day.mobility = {
       walkingSpeed: walkSpeed,
-      walkingAsymmetryPercentage: (_E = (_D = getNum2(fm, "walking_asymmetry_percentage")) != null ? _D : getNum2(fm, "walking_asymmetry")) != null ? _E : 0,
+      walkingAsymmetryPercentage: (_F = (_E = (_D = getNum2(fm, "walking_asymmetry_percentage")) != null ? _D : getNum2(fm, "walking_asymmetry_percent")) != null ? _E : getNum2(fm, "walking_asymmetry")) != null ? _F : 0,
       walkingStepLength: getNum2(fm, "walking_step_length"),
       walkingDoubleSupportPercentage: getNum2(fm, "walking_double_support_percentage")
     };
   }
-  const headphone = (_F = getNum2(fm, "headphone_audio_level")) != null ? _F : getNum2(fm, "hearing_headphone_audio_level");
+  const headphone = (_G = getNum2(fm, "headphone_audio_level")) != null ? _G : getNum2(fm, "hearing_headphone_audio_level");
   if (headphone !== void 0) {
     day.hearing = { headphoneAudioLevel: headphone };
   }
@@ -492,7 +492,49 @@ var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl, hits) => {
     grid.push({ date: day.date, col: averaged });
   });
   if (grid.length === 0) {
-    statsEl.innerHTML = `<p style="color:var(--text-muted)">Heart terrain requires timestamped heart rate samples. This data is only available in JSON format.</p>`;
+    const heartDays = data.filter((d) => d.heart && d.heart.averageHeartRate > 0);
+    if (!heartDays.length) {
+      statsEl.innerHTML = `<p style="color:var(--text-muted)">No heart rate data available.</p>`;
+      return;
+    }
+    const allAvg = heartDays.map((d) => d.heart.averageHeartRate);
+    const globalMin = Math.min(...heartDays.map((d) => d.heart.heartRateMin || d.heart.averageHeartRate));
+    const globalMax = Math.max(...heartDays.map((d) => d.heart.heartRateMax || d.heart.averageHeartRate));
+    const colW2 = W / heartDays.length;
+    heartDays.forEach((day, x) => {
+      const avg2 = day.heart.averageHeartRate;
+      const lo = day.heart.heartRateMin || avg2;
+      const hi = day.heart.heartRateMax || avg2;
+      const grad = ctx.createLinearGradient(0, H, 0, 0);
+      const tLo = (lo - globalMin) / (globalMax - globalMin || 1);
+      const tHi = (hi - globalMin) / (globalMax - globalMin || 1);
+      const tAvg = (avg2 - globalMin) / (globalMax - globalMin || 1);
+      grad.addColorStop(0, `hsl(${lerp(220, 0, tLo)},70%,${theme.isDark ? 30 : 45}%)`);
+      grad.addColorStop(0.5, `hsl(${lerp(220, 0, tAvg)},80%,${theme.isDark ? 45 : 55}%)`);
+      grad.addColorStop(1, `hsl(${lerp(220, 0, tHi)},90%,${theme.isDark ? 55 : 65}%)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(x * colW2, 0, colW2 + 1, H);
+      hits.add({
+        shape: "rect",
+        x: x * colW2,
+        y: 0,
+        w: colW2,
+        h: H,
+        title: formatDate(day.date),
+        details: [
+          { label: "Avg", value: `${Math.round(avg2)} bpm` },
+          { label: "Min", value: `${lo} bpm` },
+          { label: "Max", value: `${hi} bpm` }
+        ],
+        payload: day
+      });
+    });
+    const overallAvg = Math.round(allAvg.reduce((a, b) => a + b, 0) / allAvg.length);
+    statsEl.innerHTML = `
+			<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#4488ff">${globalMin}</div><div class="health-md-stat-label">Lowest</div></div>
+			<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#cc6666">${overallAvg}</div><div class="health-md-stat-label">Average</div></div>
+			<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#ff4444">${globalMax}</div><div class="health-md-stat-label">Highest</div></div>
+		`;
     return;
   }
   const colW = W / grid.length;
@@ -547,13 +589,52 @@ var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl, hits) => {
 };
 
 // src/visualizations/sleep-polar.ts
+function buildSyntheticStages(night) {
+  var _a, _b, _c, _d;
+  const sleep = night.sleep;
+  if (!sleep.bedtime || !sleep.wakeTime) return [];
+  const isTimeOnly = (s) => /^\d{1,2}:\d{2}$/.test(s);
+  let bedMs;
+  let wakeMs;
+  if (isTimeOnly(sleep.bedtime)) {
+    bedMs = (/* @__PURE__ */ new Date(`${night.date}T${sleep.bedtime}:00`)).getTime();
+    wakeMs = (/* @__PURE__ */ new Date(`${night.date}T${sleep.wakeTime}:00`)).getTime();
+    if (wakeMs <= bedMs) wakeMs += 864e5;
+  } else {
+    bedMs = Date.parse(sleep.bedtime);
+    wakeMs = Date.parse(sleep.wakeTime);
+  }
+  if (!isFinite(bedMs) || !isFinite(wakeMs) || wakeMs <= bedMs) return [];
+  const stages = [];
+  let cursor = bedMs;
+  function addStage(stage, secs) {
+    if (secs <= 0) return;
+    const startDate = new Date(cursor).toISOString();
+    cursor += secs * 1e3;
+    stages.push({ stage, startDate, endDate: new Date(cursor).toISOString(), durationSeconds: Math.round(secs) });
+  }
+  const awake = (_a = sleep.awakeTime) != null ? _a : 0;
+  const core = (_b = sleep.coreSleep) != null ? _b : 0;
+  const deep = (_c = sleep.deepSleep) != null ? _c : 0;
+  const rem = (_d = sleep.remSleep) != null ? _d : 0;
+  addStage("awake", awake * 0.3);
+  addStage("core", core * 0.45);
+  addStage("deep", deep);
+  addStage("rem", rem);
+  addStage("core", core * 0.55);
+  addStage("awake", awake * 0.7);
+  return stages;
+}
+function getEffectiveStages(night) {
+  var _a, _b;
+  const stages = (_b = (_a = night.sleep) == null ? void 0 : _a.sleepStages) != null ? _b : [];
+  if (stages.length > 0) return stages;
+  return buildSyntheticStages(night);
+}
 var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   const canvas = ctx.canvas;
   const nights = data.filter(
-    (d) => {
-      var _a;
-      return ((_a = d.sleep) == null ? void 0 : _a.sleepStages) && d.sleep.sleepStages.length > 0;
-    }
+    (d) => d.sleep && (d.sleep.sleepStages.length > 0 || d.sleep.totalDuration > 0)
   );
   if (!nights.length) {
     ctx.fillStyle = theme.muted;
@@ -581,11 +662,10 @@ var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl, hits) => {
     ctx.beginPath();
     ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
     ctx.fill();
-    const stages = night.sleep.sleepStages;
+    const stages = getEffectiveStages(night);
+    if (!stages.length) return;
     const firstStart = new Date(stages[0].startDate).getTime();
-    const lastEnd = new Date(
-      stages[stages.length - 1].endDate
-    ).getTime();
+    const lastEnd = new Date(stages[stages.length - 1].endDate).getTime();
     const totalSpan = lastEnd - firstStart;
     stages.forEach((stage) => {
       const start = new Date(stage.startDate).getTime();
@@ -629,14 +709,11 @@ var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl, hits) => {
         ...sleep.awakeTime ? [{ label: "Awake", value: formatDuration(sleep.awakeTime) }] : [],
         {
           label: "Bedtime",
-          value: new Date(sleep.bedtime).toLocaleTimeString("en-US", {
-            hour: "numeric",
-            minute: "2-digit"
-          })
+          value: /^\d{1,2}:\d{2}$/.test(sleep.bedtime) ? sleep.bedtime : new Date(sleep.bedtime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
         },
         {
           label: "Wake",
-          value: new Date(sleep.wakeTime).toLocaleTimeString("en-US", {
+          value: /^\d{1,2}:\d{2}$/.test(sleep.wakeTime) ? sleep.wakeTime : new Date(sleep.wakeTime).toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit"
           })
@@ -754,15 +831,26 @@ var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl, hits) => {
 };
 
 // src/visualizations/oxygen-river.ts
+function getBloodOxygenValues(day) {
+  var _a, _b, _c, _d, _e, _f, _g;
+  if ((_b = (_a = day.vitals) == null ? void 0 : _a.bloodOxygenSamples) == null ? void 0 : _b.length) {
+    return day.vitals.bloodOxygenSamples.map((s) => s.value || s.percent || 0);
+  }
+  const avg2 = (_e = (_c = day.vitals) == null ? void 0 : _c.bloodOxygenAvg) != null ? _e : (_d = day.vitals) == null ? void 0 : _d.bloodOxygenPercent;
+  if (avg2 !== void 0) {
+    const min = (_f = day.vitals) == null ? void 0 : _f.bloodOxygenMin;
+    const max = (_g = day.vitals) == null ? void 0 : _g.bloodOxygenMax;
+    if (min !== void 0 && max !== void 0 && min !== max) {
+      return [min, avg2, max];
+    }
+    return [avg2];
+  }
+  return [];
+}
 var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
-  const days = data.filter(
-    (d) => {
-      var _a;
-      return ((_a = d.vitals) == null ? void 0 : _a.bloodOxygenSamples) && d.vitals.bloodOxygenSamples.length > 0;
-    }
-  );
+  const days = data.filter((d) => getBloodOxygenValues(d).length > 0);
   if (!days.length) {
     ctx.fillStyle = theme.muted;
     ctx.font = "12px sans-serif";
@@ -772,10 +860,10 @@ var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   }
   const allSamples = [];
   days.forEach((day, di) => {
-    day.vitals.bloodOxygenSamples.forEach((s) => {
+    getBloodOxygenValues(day).forEach((v, i, arr) => {
       allSamples.push({
-        x: di + Math.random() * 0.8,
-        value: s.value || s.percent || 0
+        x: di + (arr.length > 1 ? i / (arr.length - 1) * 0.8 : 0.4),
+        value: v
       });
     });
   });
@@ -796,8 +884,7 @@ var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.globalAlpha = 1;
   const colW = W / days.length;
   days.forEach((day, di) => {
-    const samples = day.vitals.bloodOxygenSamples;
-    const vals = samples.map((s) => s.value || s.percent || 0);
+    const vals = getBloodOxygenValues(day);
     const dayMin = Math.min(...vals);
     const dayMax = Math.max(...vals);
     const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -812,7 +899,7 @@ var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl, hits) => {
         { label: "Avg SpO\u2082", value: `${dayAvg.toFixed(1)}%` },
         { label: "Min", value: `${dayMin.toFixed(1)}%` },
         { label: "Max", value: `${dayMax.toFixed(1)}%` },
-        { label: "Samples", value: `${samples.length}` }
+        { label: "Samples", value: `${vals.length}` }
       ],
       payload: day
     });
@@ -826,15 +913,26 @@ var renderOxygenRiver = (ctx, data, W, H, _config, theme, statsEl, hits) => {
 };
 
 // src/visualizations/breathing-wave.ts
+function getRespiratoryValues(day) {
+  var _a, _b, _c, _d, _e, _f, _g;
+  if ((_b = (_a = day.vitals) == null ? void 0 : _a.respiratoryRateSamples) == null ? void 0 : _b.length) {
+    return day.vitals.respiratoryRateSamples.map((s) => s.value);
+  }
+  const avg2 = (_e = (_c = day.vitals) == null ? void 0 : _c.respiratoryRate) != null ? _e : (_d = day.vitals) == null ? void 0 : _d.respiratoryRateAvg;
+  if (avg2 !== void 0) {
+    const min = (_f = day.vitals) == null ? void 0 : _f.respiratoryRateMin;
+    const max = (_g = day.vitals) == null ? void 0 : _g.respiratoryRateMax;
+    if (min !== void 0 && max !== void 0 && min !== max) {
+      return [min, avg2, max];
+    }
+    return [avg2];
+  }
+  return [];
+}
 var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
-  const days = data.filter(
-    (d) => {
-      var _a;
-      return ((_a = d.vitals) == null ? void 0 : _a.respiratoryRateSamples) && d.vitals.respiratoryRateSamples.length > 0;
-    }
-  );
+  const days = data.filter((d) => getRespiratoryValues(d).length > 0);
   if (!days.length) {
     ctx.fillStyle = theme.muted;
     ctx.font = "12px sans-serif";
@@ -843,11 +941,7 @@ var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl, hits) => {
     return;
   }
   const allVals = [];
-  days.forEach(
-    (day) => day.vitals.respiratoryRateSamples.forEach(
-      (s) => allVals.push(s.value)
-    )
-  );
+  days.forEach((day) => allVals.push(...getRespiratoryValues(day)));
   const minR = Math.min(...allVals);
   const maxR = Math.max(...allVals);
   const grad = ctx.createLinearGradient(0, 0, 0, H);
@@ -876,12 +970,11 @@ var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   ctx.stroke();
   let sampleIdx = 0;
   days.forEach((day) => {
-    const samples = day.vitals.respiratoryRateSamples;
+    const vals = getRespiratoryValues(day);
     const startIdx = sampleIdx;
-    sampleIdx += samples.length;
+    sampleIdx += vals.length;
     const x0 = startIdx / allVals.length * W;
     const x1 = sampleIdx / allVals.length * W;
-    const vals = samples.map((s) => s.value);
     const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
     const dayMin = Math.min(...vals);
     const dayMax = Math.max(...vals);
@@ -896,7 +989,7 @@ var renderBreathingWave = (ctx, data, W, H, _config, theme, statsEl, hits) => {
         { label: "Avg", value: `${dayAvg.toFixed(1)} br/min` },
         { label: "Min", value: `${dayMin.toFixed(1)}` },
         { label: "Max", value: `${dayMax.toFixed(1)}` },
-        { label: "Samples", value: `${samples.length}` }
+        { label: "Samples", value: `${vals.length}` }
       ],
       payload: day
     });
@@ -1088,13 +1181,52 @@ var renderWalkingSymmetry = (ctx, data, W, H, _config, theme, _statsEl, hits) =>
 };
 
 // src/visualizations/sleep-architecture.ts
+function buildSyntheticStages2(night) {
+  var _a, _b, _c, _d;
+  const sleep = night.sleep;
+  if (!sleep.bedtime || !sleep.wakeTime) return [];
+  const isTimeOnly = (s) => /^\d{1,2}:\d{2}$/.test(s);
+  let bedMs;
+  let wakeMs;
+  if (isTimeOnly(sleep.bedtime)) {
+    bedMs = (/* @__PURE__ */ new Date(`${night.date}T${sleep.bedtime}:00`)).getTime();
+    wakeMs = (/* @__PURE__ */ new Date(`${night.date}T${sleep.wakeTime}:00`)).getTime();
+    if (wakeMs <= bedMs) wakeMs += 864e5;
+  } else {
+    bedMs = Date.parse(sleep.bedtime);
+    wakeMs = Date.parse(sleep.wakeTime);
+  }
+  if (!isFinite(bedMs) || !isFinite(wakeMs) || wakeMs <= bedMs) return [];
+  const stages = [];
+  let cursor = bedMs;
+  function addStage(stage, secs) {
+    if (secs <= 0) return;
+    const startDate = new Date(cursor).toISOString();
+    cursor += secs * 1e3;
+    stages.push({ stage, startDate, endDate: new Date(cursor).toISOString(), durationSeconds: Math.round(secs) });
+  }
+  const awake = (_a = sleep.awakeTime) != null ? _a : 0;
+  const core = (_b = sleep.coreSleep) != null ? _b : 0;
+  const deep = (_c = sleep.deepSleep) != null ? _c : 0;
+  const rem = (_d = sleep.remSleep) != null ? _d : 0;
+  addStage("awake", awake * 0.3);
+  addStage("core", core * 0.45);
+  addStage("deep", deep);
+  addStage("rem", rem);
+  addStage("core", core * 0.55);
+  addStage("awake", awake * 0.7);
+  return stages;
+}
+function getEffectiveStages2(night) {
+  var _a, _b;
+  const stages = (_b = (_a = night.sleep) == null ? void 0 : _a.sleepStages) != null ? _b : [];
+  if (stages.length > 0) return stages;
+  return buildSyntheticStages2(night);
+}
 var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl, hits) => {
   const canvas = ctx.canvas;
   const nights = data.filter(
-    (d) => {
-      var _a;
-      return ((_a = d.sleep) == null ? void 0 : _a.sleepStages) && d.sleep.sleepStages.length > 0;
-    }
+    (d) => d.sleep && (d.sleep.sleepStages.length > 0 || d.sleep.totalDuration > 0)
   );
   if (!nights.length) {
     ctx.fillStyle = theme.muted;
@@ -1118,10 +1250,10 @@ var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl, hits) 
   ctx.scale(dpr, dpr);
   const barWidth = W - labelWidth - rightPad;
   const nightMeta = nights.map((n) => {
-    const stages = n.sleep.sleepStages;
+    const stages = getEffectiveStages2(n);
     const start = new Date(stages[0].startDate).getTime();
     const end = new Date(stages[stages.length - 1].endDate).getTime();
-    return { start, end, span: end - start };
+    return { start, end, span: end - start, stages };
   });
   const maxSpan = Math.max(...nightMeta.map((m) => m.span));
   nights.forEach((night, i) => {
@@ -1158,7 +1290,7 @@ var renderSleepArchitecture = (ctx, data, W, H, _config, theme, _statsEl, hits) 
       ],
       payload: night
     });
-    night.sleep.sleepStages.forEach((stage) => {
+    meta.stages.forEach((stage) => {
       const stageStart = new Date(stage.startDate).getTime();
       const stageEnd = new Date(stage.endDate).getTime();
       const x = labelWidth + (stageStart - meta.start) / maxSpan * barWidth;
@@ -1224,10 +1356,7 @@ var renderIntroStats = (data, el, _config, theme) => {
   const heartDays = data.filter((d) => d.heart);
   const avgHR = heartDays.length ? heartDays.reduce((s, d) => s + (d.heart.averageHeartRate || 0), 0) / heartDays.length : 0;
   const sleepNights = data.filter(
-    (d) => {
-      var _a;
-      return ((_a = d.sleep) == null ? void 0 : _a.sleepStages) && d.sleep.sleepStages.length > 0;
-    }
+    (d) => d.sleep && (d.sleep.sleepStages.length > 0 || d.sleep.totalDuration > 0)
   ).length;
   el.addClass("health-md-intro-grid");
   const stats = [

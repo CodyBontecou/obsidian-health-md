@@ -1,6 +1,22 @@
 import { HealthDay, HitRegistry, VizConfig, ResolvedTheme, RenderFn } from "../types";
 import { lerp, hsl, formatDate } from "../canvas-utils";
 
+function getBloodOxygenValues(day: HealthDay): number[] {
+	if (day.vitals?.bloodOxygenSamples?.length) {
+		return day.vitals.bloodOxygenSamples.map((s) => s.value || s.percent || 0);
+	}
+	const avg = day.vitals?.bloodOxygenAvg ?? day.vitals?.bloodOxygenPercent;
+	if (avg !== undefined) {
+		const min = day.vitals?.bloodOxygenMin;
+		const max = day.vitals?.bloodOxygenMax;
+		if (min !== undefined && max !== undefined && min !== max) {
+			return [min, avg, max];
+		}
+		return [avg];
+	}
+	return [];
+}
+
 export const renderOxygenRiver: RenderFn = (
 	ctx: CanvasRenderingContext2D,
 	data: HealthDay[],
@@ -14,9 +30,7 @@ export const renderOxygenRiver: RenderFn = (
 	ctx.fillStyle = theme.bg;
 	ctx.fillRect(0, 0, W, H);
 
-	const days = data.filter(
-		(d) => d.vitals?.bloodOxygenSamples && d.vitals.bloodOxygenSamples.length > 0
-	);
+	const days = data.filter((d) => getBloodOxygenValues(d).length > 0);
 	if (!days.length) {
 		ctx.fillStyle = theme.muted;
 		ctx.font = "12px sans-serif";
@@ -27,10 +41,10 @@ export const renderOxygenRiver: RenderFn = (
 
 	const allSamples: Array<{ x: number; value: number }> = [];
 	days.forEach((day, di) => {
-		day.vitals!.bloodOxygenSamples!.forEach((s) => {
+		getBloodOxygenValues(day).forEach((v, i, arr) => {
 			allSamples.push({
-				x: di + Math.random() * 0.8,
-				value: s.value || s.percent || 0,
+				x: di + (arr.length > 1 ? (i / (arr.length - 1)) * 0.8 : 0.4),
+				value: v,
 			});
 		});
 	});
@@ -54,8 +68,7 @@ export const renderOxygenRiver: RenderFn = (
 
 	const colW = W / days.length;
 	days.forEach((day, di) => {
-		const samples = day.vitals!.bloodOxygenSamples!;
-		const vals = samples.map((s) => s.value || s.percent || 0);
+		const vals = getBloodOxygenValues(day);
 		const dayMin = Math.min(...vals);
 		const dayMax = Math.max(...vals);
 		const dayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -70,7 +83,7 @@ export const renderOxygenRiver: RenderFn = (
 				{ label: "Avg SpO₂", value: `${dayAvg.toFixed(1)}%` },
 				{ label: "Min", value: `${dayMin.toFixed(1)}%` },
 				{ label: "Max", value: `${dayMax.toFixed(1)}%` },
-				{ label: "Samples", value: `${samples.length}` },
+				{ label: "Samples", value: `${vals.length}` },
 			],
 			payload: day,
 		});
