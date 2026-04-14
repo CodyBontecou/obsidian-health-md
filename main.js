@@ -779,12 +779,10 @@ var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl, hits) => {
     const dist = day.activity.walkingRunningDistanceKm || 0;
     const dotSize = 10 + steps / maxSteps * 30;
     const distT = maxDist > 0 ? dist / maxDist : 0;
-    const h = lerp(140, 185, distT);
-    const s = lerp(40, 95, distT);
-    const l = lerp(theme.isDark ? 18 : 30, theme.isDark ? 55 : 60, distT);
-    ctx.shadowColor = hsl(h, s, l + 20);
+    const dotAlpha = lerp(0.35, 0.9, distT);
+    ctx.shadowColor = hexToRgba(theme.colors.accent, 0.7);
     ctx.shadowBlur = dotSize;
-    ctx.fillStyle = hsl(h, s, l);
+    ctx.fillStyle = hexToRgba(theme.colors.accent, dotAlpha);
     ctx.beginPath();
     ctx.arc(x, y, dotSize / 2, 0, Math.PI * 2);
     ctx.fill();
@@ -795,7 +793,7 @@ var renderStepSpiral = (ctx, data, W, H, _config, theme, statsEl, hits) => {
       const pst = 0.15 + pt * 0.85;
       const px = cx + Math.cos(pa) * rx * pst;
       const py = cy + Math.sin(pa) * ry * pst;
-      ctx.strokeStyle = hsl(h, s, l * 0.3);
+      ctx.strokeStyle = hexToRgba(theme.colors.accent, lerp(0.08, 0.25, distT));
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(px, py);
