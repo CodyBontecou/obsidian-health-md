@@ -98,6 +98,8 @@ export interface ColorPalette {
 	};
 }
 
+export type ColorSchemeId = "default" | "ocean" | "forest" | "sunset" | "aurora" | "monochrome" | "custom";
+
 export interface HealthMdSettings {
 	dataFolder: string;
 	filePattern: string;
@@ -105,6 +107,7 @@ export interface HealthMdSettings {
 	theme: "dark" | "light" | "auto";
 	defaultWidth: number;
 	defaultHeight: number;
+	colorScheme: ColorSchemeId;
 	colorAccent: string;
 	colorSecondary: string;
 	colorHeart: string;

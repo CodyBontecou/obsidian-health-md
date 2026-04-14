@@ -2339,6 +2339,68 @@ async function renderCodeBlock(plugin, source, el, ctx) {
 }
 
 // src/main.ts
+var COLOR_SCHEMES = {
+  default: {
+    label: "Default",
+    accent: "#2dd4bf",
+    secondary: "#f59e0b",
+    heart: "#ef4444",
+    sleepDeep: "#312e81",
+    sleepRem: "#7c3aed",
+    sleepCore: "#2dd4bf",
+    sleepAwake: "#f59e0b"
+  },
+  ocean: {
+    label: "Ocean",
+    accent: "#0ea5e9",
+    secondary: "#38bdf8",
+    heart: "#e11d48",
+    sleepDeep: "#0c2461",
+    sleepRem: "#1d4ed8",
+    sleepCore: "#0ea5e9",
+    sleepAwake: "#7dd3fc"
+  },
+  forest: {
+    label: "Forest",
+    accent: "#22c55e",
+    secondary: "#84cc16",
+    heart: "#ef4444",
+    sleepDeep: "#14532d",
+    sleepRem: "#15803d",
+    sleepCore: "#4ade80",
+    sleepAwake: "#bbf7d0"
+  },
+  sunset: {
+    label: "Sunset",
+    accent: "#f97316",
+    secondary: "#ec4899",
+    heart: "#ef4444",
+    sleepDeep: "#7f1d1d",
+    sleepRem: "#be185d",
+    sleepCore: "#f97316",
+    sleepAwake: "#fbbf24"
+  },
+  aurora: {
+    label: "Aurora",
+    accent: "#a855f7",
+    secondary: "#06b6d4",
+    heart: "#f43f5e",
+    sleepDeep: "#1e1b4b",
+    sleepRem: "#6d28d9",
+    sleepCore: "#a855f7",
+    sleepAwake: "#818cf8"
+  },
+  monochrome: {
+    label: "Monochrome",
+    accent: "#94a3b8",
+    secondary: "#64748b",
+    heart: "#475569",
+    sleepDeep: "#0f172a",
+    sleepRem: "#334155",
+    sleepCore: "#64748b",
+    sleepAwake: "#cbd5e1"
+  }
+};
 var DEFAULT_SETTINGS = {
   dataFolder: "Health",
   filePattern: "*",
@@ -2346,6 +2408,7 @@ var DEFAULT_SETTINGS = {
   theme: "auto",
   defaultWidth: 800,
   defaultHeight: 400,
+  colorScheme: "default",
   colorAccent: "#2dd4bf",
   colorSecondary: "#f59e0b",
   colorHeart: "#ef4444",
@@ -2477,6 +2540,41 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
       })
     );
     containerEl.createEl("h3", { text: "Colors" });
+    const colorInputs = {};
+    const applyScheme = async (schemeId) => {
+      this.plugin.settings.colorScheme = schemeId;
+      if (schemeId !== "custom") {
+        const scheme = COLOR_SCHEMES[schemeId];
+        this.plugin.settings.colorAccent = scheme.accent;
+        this.plugin.settings.colorSecondary = scheme.secondary;
+        this.plugin.settings.colorHeart = scheme.heart;
+        this.plugin.settings.colorSleepDeep = scheme.sleepDeep;
+        this.plugin.settings.colorSleepRem = scheme.sleepRem;
+        this.plugin.settings.colorSleepCore = scheme.sleepCore;
+        this.plugin.settings.colorSleepAwake = scheme.sleepAwake;
+        if (colorInputs["colorAccent"]) colorInputs["colorAccent"].value = scheme.accent;
+        if (colorInputs["colorSecondary"]) colorInputs["colorSecondary"].value = scheme.secondary;
+        if (colorInputs["colorHeart"]) colorInputs["colorHeart"].value = scheme.heart;
+        if (colorInputs["colorSleepDeep"]) colorInputs["colorSleepDeep"].value = scheme.sleepDeep;
+        if (colorInputs["colorSleepRem"]) colorInputs["colorSleepRem"].value = scheme.sleepRem;
+        if (colorInputs["colorSleepCore"]) colorInputs["colorSleepCore"].value = scheme.sleepCore;
+        if (colorInputs["colorSleepAwake"]) colorInputs["colorSleepAwake"].value = scheme.sleepAwake;
+      }
+      await this.plugin.saveSettings();
+      this.plugin.refreshViews();
+    };
+    let schemeDropdown;
+    new import_obsidian3.Setting(containerEl).setName("Color scheme").setDesc("Choose a preset palette or customize individual colors below").addDropdown((dropdown) => {
+      Object.keys(COLOR_SCHEMES).forEach((id) => {
+        dropdown.addOption(id, COLOR_SCHEMES[id].label);
+      });
+      dropdown.addOption("custom", "Custom");
+      dropdown.setValue(this.plugin.settings.colorScheme);
+      dropdown.onChange(async (value) => {
+        await applyScheme(value);
+      });
+      schemeDropdown = dropdown.selectEl;
+    });
     const colorSettings = [
       { key: "colorAccent", name: "Accent", desc: "Primary color for activity charts (steps, breathing, rings)" },
       { key: "colorSecondary", name: "Secondary", desc: "Secondary color for calories, asymmetry, and distance" },
@@ -2491,8 +2589,11 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
       const input = setting.controlEl.createEl("input");
       input.type = "color";
       input.value = this.plugin.settings[key];
+      colorInputs[key] = input;
       input.addEventListener("change", async () => {
         this.plugin.settings[key] = input.value;
+        this.plugin.settings.colorScheme = "custom";
+        if (schemeDropdown) schemeDropdown.value = "custom";
         await this.plugin.saveSettings();
         this.plugin.refreshViews();
       });
