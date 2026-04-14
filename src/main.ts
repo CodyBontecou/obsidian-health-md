@@ -97,6 +97,16 @@ const DEFAULT_SETTINGS: HealthMdSettings = {
 export default class HealthMdPlugin extends Plugin {
 	settings: HealthMdSettings = DEFAULT_SETTINGS;
 	dataLoader!: DataLoader;
+	private drawCallbacks = new Set<() => void>();
+
+	registerDraw(fn: () => void): () => void {
+		this.drawCallbacks.add(fn);
+		return () => this.drawCallbacks.delete(fn);
+	}
+
+	redrawAll(): void {
+		this.drawCallbacks.forEach((fn) => fn());
+	}
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -241,6 +251,7 @@ class HealthMdSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.theme = value as "auto" | "dark" | "light";
 						await this.plugin.saveSettings();
+						this.plugin.redrawAll();
 					})
 			);
 
@@ -300,7 +311,7 @@ class HealthMdSettingTab extends PluginSettingTab {
 				if (colorInputs["colorSleepAwake"]) colorInputs["colorSleepAwake"].value = scheme.sleepAwake;
 			}
 			await this.plugin.saveSettings();
-			this.plugin.refreshViews();
+			this.plugin.redrawAll();
 		};
 
 		let schemeDropdown: HTMLSelectElement;
@@ -346,7 +357,7 @@ class HealthMdSettingTab extends PluginSettingTab {
 				this.plugin.settings.colorScheme = "custom";
 				if (schemeDropdown) schemeDropdown.value = "custom";
 				await this.plugin.saveSettings();
-				this.plugin.refreshViews();
+				this.plugin.redrawAll();
 			});
 		});
 	}

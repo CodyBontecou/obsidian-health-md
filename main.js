@@ -2192,13 +2192,18 @@ var VizRenderChild = class extends import_obsidian2.MarkdownRenderChild {
   constructor() {
     super(...arguments);
     this.observer = null;
+    this.unregisterDraw = null;
   }
   setObserver(obs) {
     this.observer = obs;
   }
+  setUnregisterDraw(fn) {
+    this.unregisterDraw = fn;
+  }
   onunload() {
-    var _a;
+    var _a, _b;
     (_a = this.observer) == null ? void 0 : _a.disconnect();
+    (_b = this.unregisterDraw) == null ? void 0 : _b.call(this);
   }
 };
 async function renderCodeBlock(plugin, source, el, ctx) {
@@ -2217,6 +2222,10 @@ async function renderCodeBlock(plugin, source, el, ctx) {
     return;
   }
   if (config.type === "intro-stats") {
+    let drawIntro = function() {
+      container2.empty();
+      renderIntroStats(data2, container2, config, resolveTheme(plugin.settings));
+    };
     const allData2 = await plugin.dataLoader.load();
     if (!allData2.length) {
       el.createEl("p", {
@@ -2231,9 +2240,11 @@ async function renderCodeBlock(plugin, source, el, ctx) {
       });
       return;
     }
-    const theme2 = resolveTheme(plugin.settings);
     const container2 = el.createDiv({ cls: "health-md-container" });
-    renderIntroStats(data2, container2, config, theme2);
+    drawIntro();
+    const introChild = new VizRenderChild(container2);
+    introChild.setUnregisterDraw(plugin.registerDraw(drawIntro));
+    ctx.addChild(introChild);
     return;
   }
   const renderFn = VISUALIZATIONS[config.type];
@@ -2260,7 +2271,6 @@ async function renderCodeBlock(plugin, source, el, ctx) {
   }
   const defaultWidth = (_a = config.width) != null ? _a : plugin.settings.defaultWidth;
   const height = (_b = config.height) != null ? _b : plugin.settings.defaultHeight;
-  const theme = resolveTheme(plugin.settings);
   const container = el.createDiv({ cls: "health-md-container" });
   const canvas = container.createEl("canvas");
   const tooltipEl = container.createDiv({ cls: "health-md-tooltip" });
@@ -2330,12 +2340,13 @@ async function renderCodeBlock(plugin, source, el, ctx) {
     pinned = null;
     tooltipEl.style.display = "none";
     const canvasCtx = setupCanvas(canvas, width, height);
-    renderFn(canvasCtx, data, width, height, config, theme, statsEl, hits);
+    renderFn(canvasCtx, data, width, height, config, resolveTheme(plugin.settings), statsEl, hits);
   }
   draw();
   const observer = new ResizeObserver(() => draw());
   observer.observe(container);
   renderChild.setObserver(observer);
+  renderChild.setUnregisterDraw(plugin.registerDraw(draw));
 }
 
 // src/main.ts
@@ -2421,6 +2432,14 @@ var HealthMdPlugin = class extends import_obsidian3.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
+    this.drawCallbacks = /* @__PURE__ */ new Set();
+  }
+  registerDraw(fn) {
+    this.drawCallbacks.add(fn);
+    return () => this.drawCallbacks.delete(fn);
+  }
+  redrawAll() {
+    this.drawCallbacks.forEach((fn) => fn());
   }
   async onload() {
     await this.loadSettings();
@@ -2519,6 +2538,7 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
       (dropdown) => dropdown.addOption("auto", "Auto (match Obsidian)").addOption("dark", "Dark").addOption("light", "Light").setValue(this.plugin.settings.theme).onChange(async (value) => {
         this.plugin.settings.theme = value;
         await this.plugin.saveSettings();
+        this.plugin.redrawAll();
       })
     );
     new import_obsidian3.Setting(containerEl).setName("Default width").setDesc("Default canvas width in pixels").addText(
@@ -2561,7 +2581,7 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
         if (colorInputs["colorSleepAwake"]) colorInputs["colorSleepAwake"].value = scheme.sleepAwake;
       }
       await this.plugin.saveSettings();
-      this.plugin.refreshViews();
+      this.plugin.redrawAll();
     };
     let schemeDropdown;
     new import_obsidian3.Setting(containerEl).setName("Color scheme").setDesc("Choose a preset palette or customize individual colors below").addDropdown((dropdown) => {
@@ -2595,7 +2615,7 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
         this.plugin.settings.colorScheme = "custom";
         if (schemeDropdown) schemeDropdown.value = "custom";
         await this.plugin.saveSettings();
-        this.plugin.refreshViews();
+        this.plugin.redrawAll();
       });
     });
   }

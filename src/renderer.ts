@@ -437,13 +437,19 @@ function renderTooltipContent(
 
 class VizRenderChild extends MarkdownRenderChild {
 	private observer: ResizeObserver | null = null;
+	private unregisterDraw: (() => void) | null = null;
 
 	setObserver(obs: ResizeObserver): void {
 		this.observer = obs;
 	}
 
+	setUnregisterDraw(fn: () => void): void {
+		this.unregisterDraw = fn;
+	}
+
 	onunload(): void {
 		this.observer?.disconnect();
+		this.unregisterDraw?.();
 	}
 }
 
@@ -484,9 +490,15 @@ export async function renderCodeBlock(
 			});
 			return;
 		}
-		const theme = resolveTheme(plugin.settings);
 		const container = el.createDiv({ cls: "health-md-container" });
-		renderIntroStats(data, container, config, theme);
+		function drawIntro(): void {
+			container.empty();
+			renderIntroStats(data, container, config, resolveTheme(plugin.settings));
+		}
+		drawIntro();
+		const introChild = new VizRenderChild(container);
+		introChild.setUnregisterDraw(plugin.registerDraw(drawIntro));
+		ctx.addChild(introChild);
 		return;
 	}
 
@@ -516,7 +528,6 @@ export async function renderCodeBlock(
 
 	const defaultWidth = config.width ?? plugin.settings.defaultWidth;
 	const height = (config.height ?? plugin.settings.defaultHeight) as number;
-	const theme = resolveTheme(plugin.settings);
 
 	const container = el.createDiv({ cls: "health-md-container" });
 	const canvas = container.createEl("canvas");
@@ -594,7 +605,7 @@ export async function renderCodeBlock(
 		pinned = null;
 		tooltipEl.style.display = "none";
 		const canvasCtx = setupCanvas(canvas, width, height);
-		renderFn(canvasCtx, data, width, height, config, theme, statsEl, hits);
+		renderFn(canvasCtx, data, width, height, config, resolveTheme(plugin.settings), statsEl, hits);
 	}
 
 	draw();
@@ -602,4 +613,5 @@ export async function renderCodeBlock(
 	const observer = new ResizeObserver(() => draw());
 	observer.observe(container);
 	renderChild.setObserver(observer);
+	renderChild.setUnregisterDraw(plugin.registerDraw(draw));
 }
