@@ -643,13 +643,23 @@ var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl, hits) => {
     ctx.fillText("No sleep data", W / 2, H / 2);
     return;
   }
-  ctx.fillStyle = theme.bg;
-  ctx.fillRect(0, 0, W, H);
   const cols = 3;
   const rows = Math.ceil(nights.length / cols);
   const cellW = Math.floor((W - (cols - 1) * 6) / cols);
   const cellH = Math.floor((H - (rows - 1) * 6) / rows);
   const cellSize = Math.min(cellW, cellH);
+  const actualH = rows * (cellSize + 6) - 6;
+  if (actualH < H) {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = actualH * dpr;
+    canvas.style.width = W + "px";
+    canvas.style.height = actualH + "px";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+  }
+  ctx.fillStyle = theme.bg;
+  ctx.fillRect(0, 0, W, actualH < H ? actualH : H);
   nights.forEach((night, idx) => {
     const row = Math.floor(idx / cols);
     const col = idx % cols;
@@ -722,13 +732,6 @@ var renderSleepPolar = (ctx, data, W, H, _config, theme, statsEl, hits) => {
       payload: night
     });
   });
-  const actualRows = Math.ceil(nights.length / cols);
-  const actualH = actualRows * (cellSize + 6) - 6;
-  if (actualH < H) {
-    const dpr = window.devicePixelRatio || 1;
-    canvas.height = actualH * dpr;
-    canvas.style.height = actualH + "px";
-  }
 };
 
 // src/visualizations/step-spiral.ts
