@@ -464,8 +464,8 @@ function resolveTheme(setting) {
 var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl, hits) => {
   const BUCKETS = 96;
   const days = data.filter((d) => {
-    var _a;
-    return (_a = d.heart) == null ? void 0 : _a.heartRateSamples;
+    var _a, _b;
+    return (_b = (_a = d.heart) == null ? void 0 : _a.heartRateSamples) == null ? void 0 : _b.length;
   });
   const grid = [];
   let minBPM = 999, maxBPM = 0;
@@ -491,6 +491,10 @@ var renderHeartTerrain = (ctx, data, W, H, _config, theme, statsEl, hits) => {
     });
     grid.push({ date: day.date, col: averaged });
   });
+  if (grid.length === 0) {
+    statsEl.innerHTML = `<p style="color:var(--text-muted)">Heart terrain requires timestamped heart rate samples. This data is only available in JSON format.</p>`;
+    return;
+  }
   const colW = W / grid.length;
   const rowH = H / BUCKETS;
   grid.forEach((day, x) => {
