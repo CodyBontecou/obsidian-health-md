@@ -56,6 +56,15 @@ to: 2026-04-14T23:59
 height: 100
 ```
 
+### Blood Oxygen Range — Last 7 Days
+
+```health-viz
+type: oxygen-range
+metric: blood-oxygen
+last: 7
+height: 200
+```
+
 ---
 
 ## Respiratory Rate

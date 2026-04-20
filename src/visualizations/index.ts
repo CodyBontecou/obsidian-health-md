@@ -19,6 +19,7 @@ import { renderHeartRange } from "./heart-range";
 import { renderBarChart } from "./bar-chart";
 import { renderSleepSchedule } from "./sleep-schedule";
 import { renderWeekdayAverage } from "./weekday-average";
+import { renderOxygenRange } from "./oxygen-range";
 
 export const VISUALIZATIONS: Record<string, RenderFn> = {
 	"heart-terrain": renderHeartTerrain,
@@ -38,6 +39,7 @@ export const VISUALIZATIONS: Record<string, RenderFn> = {
 	"bar-chart": renderBarChart,
 	"sleep-schedule": renderSleepSchedule,
 	"weekday-average": renderWeekdayAverage,
+	"oxygen-range": renderOxygenRange,
 };
 
 export const HTML_VISUALIZATIONS: Record<string, HtmlRenderFn> = {
