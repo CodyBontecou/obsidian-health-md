@@ -68,8 +68,25 @@ Specify one of these as the `type:` field in your code block:
 | `vitals-rings` | Concentric activity rings (steps, calories, heart rate) per day. |
 | `walking-symmetry` | Walking asymmetry and gait metrics. |
 | `intro-stats` | HTML summary card — totals, averages, and highlights for the dataset. |
+| `summary-card` | Apple-style headline card: large KPI, sparkline, week-over-week delta. Configure with `metric` (`heart-rate`, `steps`, `sleep-duration`, `active-calories`, `hrv`, `blood-oxygen`, `respiratory-rate`) and optional `compareWindow` (`same-length`, `week`, `month`). |
+| `activity-rings` | Apple's three concentric Move / Exercise / Stand rings. Single-day shows one large ring set; multi-day shows a small-multiples grid. Tune targets with `moveGoal`, `exerciseGoal`, `standGoal`. |
+| `heart-range` | Per-day min-to-max heart rate capsule with an average dot. `metric`: `heart-rate` (default), `resting`, or `walking`. |
+| `bar-chart` | Apple-style vertical bars with the latest day highlighted. `metric`: `steps`, `activeCalories`, `exerciseMinutes`, `distance`, `sleepHours`, `flightsClimbed`. Optional `goal` draws a dashed goal line; `showAverage` toggles the mean line. |
+| `sleep-schedule` | Horizontal bedtime-to-wake bars against a sunset→night→sunrise backdrop. `sleepGoal` (hours), `windowStart` / `windowEnd` (`HH:MM`). |
+| `weekday-average` | Seven bars showing a metric's average by day of week with an overall-mean dashed line. `metric`: `steps`, `activeCalories`, `exerciseMinutes`, `sleepHours`, `heartRate`, `hrv`. `weekStart`: `monday` (default) or `sunday`. |
+| `trend-tile` | Compact HTML card for the Apple Health Trends tab: arrow + percent delta + narrative + two-period sparkline. `metric`: `resting-heart-rate`, `hrv`, `steps`, `vo2max`, `walking-speed`, `sleep-duration`, `active-calories`. Optional `currentWindow` and `priorWindow` (days). |
+| `oxygen-range` | Per-day min/max capsule + average dot for SpO₂ or respiratory rate, with a warning-zone shade. `metric`: `blood-oxygen` (default) or `respiratory-rate`. |
 
-All chart types support hover tooltips and click-to-pin. The `intro-stats` type is HTML-only (no canvas).
+All chart types support hover tooltips and click-to-pin. The `intro-stats`, `summary-card`, and `trend-tile` types are HTML/SVG (no canvas) for sharper typography.
+
+### Bundled examples
+
+Starter dashboards live in the `examples/` folder — copy any of them into your vault to see the code blocks render:
+
+- `examples/apple-dashboard.md` — full Apple Health-style summary using the eight Apple visualizations (summary cards, activity rings, heart range, bar chart, sleep schedule, weekday average, oxygen range, trend tiles).
+- `examples/daily-dashboard.md` — single-day overview for daily notes.
+- `examples/weekly-overview.md` — rolling week-at-a-glance.
+- `examples/sleep-analysis.md` — sleep-focused drill-down.
 
 ## Embedding charts in notes
 
