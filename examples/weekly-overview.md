@@ -25,6 +25,17 @@ last: 14
 
 ---
 
+## Weekday Averages (Steps)
+
+```health-viz
+type: weekday-average
+metric: steps
+last: 28
+height: 220
+```
+
+---
+
 ## Steps Bar Chart (Apple style)
 
 ```health-viz
