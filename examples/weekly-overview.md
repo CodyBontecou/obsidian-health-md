@@ -25,6 +25,18 @@ last: 14
 
 ---
 
+## Steps Bar Chart (Apple style)
+
+```health-viz
+type: bar-chart
+metric: steps
+last: 7
+height: 220
+goal: 10000
+```
+
+---
+
 ## Activity Heatmap — Steps
 
 GitHub-style grid showing daily step counts. Deeper color = more steps.
