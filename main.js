@@ -2768,6 +2768,8 @@ var renderBarChart = (ctx, data, W, H, config, theme, statsEl, hits) => {
   const average = nonZero.length ? total / nonZero.length : 0;
   const goal = config.goal != null ? Number(config.goal) : void 0;
   const showAverage = config.showAverage === void 0 || config.showAverage === "true" || config.showAverage === 1 || config.showAverage === "1";
+  const chartEffectiveMax = goal && goal > max ? goal : max;
+  const denom = chartEffectiveMax > 0 ? chartEffectiveMax : 1;
   const kpiH = 46;
   const axisH = 18;
   const padT = 8;
@@ -2789,16 +2791,15 @@ var renderBarChart = (ctx, data, W, H, config, theme, statsEl, hits) => {
   ctx.fillText(` ${meta.unit}`, padL + headlineMetrics.width + 2, padT + 22);
   ctx.fillText(subtitle, padL, padT + 40);
   const accent = meta.color(theme);
-  if (max > 0) {
+  if (chartEffectiveMax > 0) {
     ctx.fillStyle = theme.muted;
     ctx.font = "10px sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "top";
-    const maxLabel = meta.formatValue(max);
-    ctx.fillText(maxLabel, W - 4, plotTop);
+    ctx.fillText(meta.formatValue(chartEffectiveMax), W - 4, plotTop);
   }
-  if (showAverage && average > 0 && max > 0) {
-    const y = plotTop + plotH - average / max * plotH;
+  if (showAverage && average > 0 && chartEffectiveMax > 0) {
+    const y = plotTop + plotH - average / denom * plotH;
     ctx.save();
     ctx.strokeStyle = hexToRgba(theme.fg, 0.4);
     ctx.lineWidth = 1;
@@ -2814,10 +2815,8 @@ var renderBarChart = (ctx, data, W, H, config, theme, statsEl, hits) => {
     ctx.textBaseline = "bottom";
     ctx.fillText(`avg ${meta.formatValue(average)}`, W - padR - 4, y - 2);
   }
-  if (goal && max > 0 && goal <= max * 1.1) {
-    const effectiveMax = Math.max(max, goal);
-    const yScale = max >= goal ? max : goal;
-    const y = plotTop + plotH - goal / yScale * plotH;
+  if (goal && chartEffectiveMax > 0) {
+    const y = plotTop + plotH - goal / denom * plotH;
     ctx.save();
     ctx.strokeStyle = hexToRgba(accent, 0.8);
     ctx.lineWidth = 1;
@@ -2833,8 +2832,6 @@ var renderBarChart = (ctx, data, W, H, config, theme, statsEl, hits) => {
     ctx.textBaseline = "bottom";
     ctx.fillText(`goal ${meta.formatValue(goal)}`, padL + 2, y - 2);
   }
-  const chartEffectiveMax = goal && goal > max ? goal : max;
-  const denom = chartEffectiveMax > 0 ? chartEffectiveMax : 1;
   const chartW = W - padL - padR;
   const slot = chartW / n;
   const barW = Math.max(3, Math.min(slot * 0.72, 28));

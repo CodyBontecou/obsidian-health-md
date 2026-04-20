@@ -123,6 +123,10 @@ export const renderBarChart: RenderFn = (
 	const goal = config.goal != null ? Number(config.goal) : undefined;
 	const showAverage = config.showAverage === undefined || config.showAverage === "true" || config.showAverage === 1 || config.showAverage === "1";
 
+	// Single y-axis scale used by bars and all reference lines.
+	const chartEffectiveMax = goal && goal > max ? goal : max;
+	const denom = chartEffectiveMax > 0 ? chartEffectiveMax : 1;
+
 	// KPI area at top
 	const kpiH = 46;
 	const axisH = 18;
@@ -151,19 +155,18 @@ export const renderBarChart: RenderFn = (
 	// Chart plot area
 	const accent = meta.color(theme);
 
-	// Right-aligned max value label (y-axis)
-	if (max > 0) {
+	// Right-aligned y-axis label — reflects the actual top of the scale.
+	if (chartEffectiveMax > 0) {
 		ctx.fillStyle = theme.muted;
 		ctx.font = "10px sans-serif";
 		ctx.textAlign = "right";
 		ctx.textBaseline = "top";
-		const maxLabel = meta.formatValue(max);
-		ctx.fillText(maxLabel, W - 4, plotTop);
+		ctx.fillText(meta.formatValue(chartEffectiveMax), W - 4, plotTop);
 	}
 
 	// Average dashed line
-	if (showAverage && average > 0 && max > 0) {
-		const y = plotTop + plotH - (average / max) * plotH;
+	if (showAverage && average > 0 && chartEffectiveMax > 0) {
+		const y = plotTop + plotH - (average / denom) * plotH;
 		ctx.save();
 		ctx.strokeStyle = hexToRgba(theme.fg, 0.4);
 		ctx.lineWidth = 1;
@@ -180,12 +183,9 @@ export const renderBarChart: RenderFn = (
 		ctx.fillText(`avg ${meta.formatValue(average)}`, W - padR - 4, y - 2);
 	}
 
-	// Goal dashed line
-	if (goal && max > 0 && goal <= max * 1.1) {
-		const effectiveMax = Math.max(max, goal);
-		// Recompute y for goal using effective max? Keep proportional to `max` to match bars.
-		const yScale = max >= goal ? max : goal;
-		const y = plotTop + plotH - (goal / yScale) * plotH;
+	// Goal dashed line — always drawn when goal participates in the y-axis scale.
+	if (goal && chartEffectiveMax > 0) {
+		const y = plotTop + plotH - (goal / denom) * plotH;
 		ctx.save();
 		ctx.strokeStyle = hexToRgba(accent, 0.8);
 		ctx.lineWidth = 1;
@@ -200,12 +200,8 @@ export const renderBarChart: RenderFn = (
 		ctx.textAlign = "left";
 		ctx.textBaseline = "bottom";
 		ctx.fillText(`goal ${meta.formatValue(goal)}`, padL + 2, y - 2);
-		// Use effectiveMax so overshoots aren't clipped visually
-		void effectiveMax;
 	}
 
-	const chartEffectiveMax = goal && goal > max ? goal : max;
-	const denom = chartEffectiveMax > 0 ? chartEffectiveMax : 1;
 	const chartW = W - padL - padR;
 	const slot = chartW / n;
 	const barW = Math.max(3, Math.min(slot * 0.72, 28));
