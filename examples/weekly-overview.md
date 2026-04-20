@@ -84,6 +84,16 @@ height: 260
 
 ---
 
+## Heart Rate Range (Apple style)
+
+```health-viz
+type: heart-range
+last: 7
+height: 200
+```
+
+---
+
 ## Heart Rate Terrain
 
 All 7 days of heart rate stacked as ridgeline rows. Earlier days sit at the
