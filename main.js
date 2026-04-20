@@ -2495,106 +2495,84 @@ var renderActivityRings = (ctx, data, W, H, config, theme, statsEl, hits) => {
 	`;
 };
 
-// src/visualizations/heart-range.ts
-function extractForMetric(day, metric) {
-  if (!day.heart) return null;
-  if (metric === "resting") {
-    const v = day.heart.restingHeartRate;
-    if (v == null || v <= 0) return null;
-    return { date: day.date, min: v, max: v, avg: v, day };
-  }
-  if (metric === "walking") {
-    const v = day.heart.walkingHeartRateAverage;
-    if (v == null || v <= 0) return null;
-    return { date: day.date, min: v, max: v, avg: v, day };
-  }
-  const min = day.heart.heartRateMin;
-  const max = day.heart.heartRateMax;
-  const avg4 = day.heart.averageHeartRate;
-  if (avg4 == null || avg4 <= 0) return null;
-  return {
-    date: day.date,
-    min: min > 0 ? min : avg4,
-    max: max > 0 ? max : avg4,
-    avg: avg4,
-    day
-  };
-}
-function metricLabel(m) {
-  if (m === "resting") return "Resting HR";
-  if (m === "walking") return "Walking HR";
-  return "Heart Rate";
-}
-var renderHeartRange = (ctx, data, W, H, config, theme, statsEl, hits) => {
+// src/visualizations/range-chart-core.ts
+function renderRangeChart(ctx, data, W, H, theme, statsEl, hits, spec) {
+  var _a, _b, _c, _d, _e, _f;
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
-  const metric = config.metric || "heart-rate";
-  const points = data.map((d) => extractForMetric(d, metric));
-  const presentPoints = points.filter((p) => p !== null);
-  if (!presentPoints.length) {
+  const points = data.map((d) => {
+    const v = spec.extract(d);
+    return v ? { day: d, date: d.date, ...v } : null;
+  });
+  const present = points.filter((p) => p !== null);
+  if (!present.length) {
     ctx.fillStyle = theme.muted;
     ctx.font = "12px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`No ${metricLabel(metric).toLowerCase()} data`, W / 2, H / 2);
+    ctx.fillText(`No ${spec.label.toLowerCase()} data`, W / 2, H / 2);
     return;
   }
-  const padL = 36, padR = 16, padT = 14, padB = 24;
+  const padL = (_a = spec.padL) != null ? _a : 36;
+  const padR = 16, padT = 14, padB = 24;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
-  const allMin = Math.min(...presentPoints.map((p) => p.min));
-  const allMax = Math.max(...presentPoints.map((p) => p.max));
-  const pad = 20;
-  const yMin = Math.max(0, Math.floor((allMin - pad) / 10) * 10);
-  const yMax = Math.ceil((allMax + pad) / 10) * 10;
+  const observedMin = Math.min(...present.map((p) => p.min));
+  const observedMax = Math.max(...present.map((p) => p.max));
+  const { yMin, yMax, gridStep } = spec.yAxis({ min: observedMin, max: observedMax });
   const yRange = yMax - yMin || 1;
   const n = points.length;
   const xFor = (i) => padL + (n === 1 ? plotW / 2 : i / (n - 1) * plotW);
   const yFor = (v) => padT + plotH - (v - yMin) / yRange * plotH;
-  const step = yRange > 120 ? 40 : 20;
+  if (spec.warn) {
+    ctx.fillStyle = hexToRgba(spec.warn.color, theme.isDark ? 0.12 : 0.08);
+    if (spec.warn.lo != null) {
+      const yThreshold = yFor(spec.warn.lo);
+      ctx.fillRect(padL, yThreshold, plotW, padT + plotH - yThreshold);
+    }
+    if (spec.warn.hi != null) {
+      const yThreshold = yFor(spec.warn.hi);
+      ctx.fillRect(padL, padT, plotW, yThreshold - padT);
+    }
+  }
   ctx.strokeStyle = hexToRgba(theme.fg, 0.07);
   ctx.lineWidth = 1;
   ctx.fillStyle = theme.muted;
   ctx.font = "9px sans-serif";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
-  const startGrid = Math.ceil(yMin / step) * step;
-  for (let v = startGrid; v <= yMax; v += step) {
+  const startGrid = Math.ceil(yMin / gridStep) * gridStep;
+  for (let v = startGrid; v <= yMax; v += gridStep) {
     const y = yFor(v);
     ctx.beginPath();
     ctx.moveTo(padL, y);
     ctx.lineTo(W - padR, y);
     ctx.stroke();
-    ctx.fillText(String(v), padL - 4, y);
+    ctx.fillText(spec.formatAxisLabel(v), padL - 4, y);
   }
-  if (metric === "heart-rate") {
-    const restingVals = data.map((d) => {
-      var _a;
-      return (_a = d.heart) == null ? void 0 : _a.restingHeartRate;
-    }).filter((v) => v != null && v > 0);
-    if (restingVals.length) {
-      const rest = restingVals.reduce((s, x) => s + x, 0) / restingVals.length;
-      if (rest >= yMin && rest <= yMax) {
-        const y = yFor(rest);
-        ctx.save();
-        ctx.strokeStyle = hexToRgba("#4488ff", 0.55);
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(padL, y);
-        ctx.lineTo(W - padR, y);
-        ctx.stroke();
-        ctx.restore();
-        ctx.fillStyle = "#4488ff";
-        ctx.font = "9px sans-serif";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(`resting ~${Math.round(rest)}`, padL + 4, y - 2);
-      }
-    }
+  if (spec.warn) {
+    const thresholdV = (_b = spec.warn.lo) != null ? _b : spec.warn.hi;
+    const y = yFor(thresholdV);
+    ctx.save();
+    ctx.strokeStyle = hexToRgba(spec.warn.color, 0.55);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = spec.warn.color;
+    ctx.font = "9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(spec.warn.note, padL + 4, y - 2);
   }
-  const capColor = "#ff3b30";
+  if (spec.overlays) {
+    spec.overlays({ ctx, data, yFor, yMin, yMax, padL, padR, W });
+  }
   const capW = Math.max(4, Math.min(10, plotW / Math.max(1, n) * 0.45));
   const capRadius = capW / 2;
+  const avgDotInnerLight = (_c = spec.avgDotInnerLightFill) != null ? _c : "#000";
   points.forEach((p, i) => {
     if (!p) return;
     const x = xFor(i);
@@ -2602,18 +2580,18 @@ var renderHeartRange = (ctx, data, W, H, config, theme, statsEl, hits) => {
     const yBot = yFor(p.min);
     const h = Math.max(capW, yBot - yTop);
     const grad = ctx.createLinearGradient(0, yTop, 0, yTop + h);
-    grad.addColorStop(0, hexToRgba(capColor, 1));
-    grad.addColorStop(1, hexToRgba(capColor, 0.55));
+    grad.addColorStop(0, hexToRgba(spec.capsuleColor, 1));
+    grad.addColorStop(1, hexToRgba(spec.capsuleColor, 0.55));
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.roundRect(x - capW / 2, yTop, capW, h, capRadius);
     ctx.fill();
     const yAvg = yFor(p.avg);
-    ctx.fillStyle = theme.isDark ? "#fff" : "#1a0000";
+    ctx.fillStyle = theme.isDark ? "#fff" : avgDotInnerLight;
     ctx.beginPath();
     ctx.arc(x, yAvg, Math.max(2, capW * 0.38), 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = capColor;
+    ctx.strokeStyle = spec.capsuleColor;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(x, yAvg, Math.max(2, capW * 0.38), 0, Math.PI * 2);
@@ -2626,9 +2604,9 @@ var renderHeartRange = (ctx, data, W, H, config, theme, statsEl, hits) => {
       h: h + 8,
       title: formatDate(p.date),
       details: [
-        { label: "Avg", value: `${Math.round(p.avg)} bpm` },
-        { label: "Min", value: `${Math.round(p.min)} bpm` },
-        { label: "Max", value: `${Math.round(p.max)} bpm` }
+        { label: "Avg", value: `${spec.formatValue(p.avg)} ${spec.unit}` },
+        { label: "Min", value: `${spec.formatValue(p.min)} ${spec.unit}` },
+        { label: "Max", value: `${spec.formatValue(p.max)} ${spec.unit}` }
       ],
       payload: p.day
     });
@@ -2638,26 +2616,95 @@ var renderHeartRange = (ctx, data, W, H, config, theme, statsEl, hits) => {
   ctx.font = "9px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  points.forEach((_p, i) => {
-    var _a;
-    if (i % labelStep !== 0 && i !== n - 1) return;
-    const point = points[i];
-    const iso = point ? point.date : (_a = data[i]) == null ? void 0 : _a.date;
-    if (!iso) return;
+  for (let i = 0; i < n; i++) {
+    if (i % labelStep !== 0 && i !== n - 1) continue;
+    const iso = (_f = (_d = points[i]) == null ? void 0 : _d.date) != null ? _f : (_e = data[i]) == null ? void 0 : _e.date;
+    if (!iso) continue;
     const d = /* @__PURE__ */ new Date(iso + "T00:00:00");
     const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     ctx.fillText(label, xFor(i), H - padB + 6);
-  });
-  const overallMin = Math.min(...presentPoints.map((p) => p.min));
-  const overallMax = Math.max(...presentPoints.map((p) => p.max));
-  const overallAvg = Math.round(
-    presentPoints.reduce((s, p) => s + p.avg, 0) / presentPoints.length
-  );
+  }
+  const overallMin = Math.min(...present.map((p) => p.min));
+  const overallMax = Math.max(...present.map((p) => p.max));
+  const overallAvg = present.reduce((s, p) => s + p.avg, 0) / present.length;
   statsEl.innerHTML = `
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#4488ff">${Math.round(overallMin)}</div><div class="health-md-stat-label">Lowest</div></div>
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${capColor}">${overallAvg}</div><div class="health-md-stat-label">${metricLabel(metric)} Avg</div></div>
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:#ff3b30">${Math.round(overallMax)}</div><div class="health-md-stat-label">Highest</div></div>
+		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${spec.stats.lowColor}">${spec.formatValue(overallMin)}</div><div class="health-md-stat-label">Lowest</div></div>
+		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${spec.stats.avgColor}">${spec.formatValue(overallAvg)}</div><div class="health-md-stat-label">${spec.label} Avg</div></div>
+		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${spec.stats.highColor}">${spec.formatValue(overallMax)}</div><div class="health-md-stat-label">Highest</div></div>
 	`;
+}
+
+// src/visualizations/heart-range.ts
+var CAP_COLOR = "#ff3b30";
+var RESTING_COLOR = "#4488ff";
+function extractForMetric(day, metric) {
+  if (!day.heart) return null;
+  if (metric === "resting") {
+    const v = day.heart.restingHeartRate;
+    if (v == null || v <= 0) return null;
+    return { min: v, max: v, avg: v };
+  }
+  if (metric === "walking") {
+    const v = day.heart.walkingHeartRateAverage;
+    if (v == null || v <= 0) return null;
+    return { min: v, max: v, avg: v };
+  }
+  const min = day.heart.heartRateMin;
+  const max = day.heart.heartRateMax;
+  const avg4 = day.heart.averageHeartRate;
+  if (avg4 == null || avg4 <= 0) return null;
+  return { min: min > 0 ? min : avg4, max: max > 0 ? max : avg4, avg: avg4 };
+}
+function labelFor(m) {
+  if (m === "resting") return "Resting HR";
+  if (m === "walking") return "Walking HR";
+  return "Heart Rate";
+}
+function restingOverlay({ ctx, data, yFor, yMin, yMax, padL, padR, W }) {
+  const vals = data.map((d) => {
+    var _a;
+    return (_a = d.heart) == null ? void 0 : _a.restingHeartRate;
+  }).filter((v) => v != null && v > 0);
+  if (!vals.length) return;
+  const rest = vals.reduce((s, x) => s + x, 0) / vals.length;
+  if (rest < yMin || rest > yMax) return;
+  const y = yFor(rest);
+  ctx.save();
+  ctx.strokeStyle = hexToRgba(RESTING_COLOR, 0.55);
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(padL, y);
+  ctx.lineTo(W - padR, y);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = RESTING_COLOR;
+  ctx.font = "9px sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(`resting ~${Math.round(rest)}`, padL + 4, y - 2);
+}
+var renderHeartRange = (ctx, data, W, H, config, theme, statsEl, hits) => {
+  const metric = config.metric || "heart-rate";
+  const spec = {
+    label: labelFor(metric),
+    unit: "bpm",
+    capsuleColor: CAP_COLOR,
+    padL: 36,
+    avgDotInnerLightFill: "#1a0000",
+    extract: (d) => extractForMetric(d, metric),
+    yAxis: ({ min, max }) => {
+      const yMin = Math.max(0, Math.floor((min - 20) / 10) * 10);
+      const yMax = Math.ceil((max + 20) / 10) * 10;
+      const range = yMax - yMin || 1;
+      return { yMin, yMax, gridStep: range > 120 ? 40 : 20 };
+    },
+    formatAxisLabel: (v) => String(v),
+    formatValue: (v) => String(Math.round(v)),
+    stats: { lowColor: RESTING_COLOR, avgColor: CAP_COLOR, highColor: CAP_COLOR },
+    overlays: metric === "heart-rate" ? restingOverlay : void 0
+  };
+  renderRangeChart(ctx, data, W, H, theme, statsEl, hits, spec);
 };
 
 // src/visualizations/bar-chart.ts
@@ -3377,177 +3424,56 @@ function specFor(metric) {
     return {
       label: "Respiratory Rate",
       unit: "brpm",
-      color: "#3bb2c1",
-      yMin: 10,
-      yMax: 25,
-      gridStep: 5,
-      // Medical ref ranges vary; flag sustained >20 brpm at rest.
-      warn: { hi: 20, color: "#ff3b30", note: "Elevated >20 brpm" },
+      capsuleColor: "#3bb2c1",
+      padL: 40,
+      avgDotInnerLightFill: "#0a1a22",
       extract: (d) => {
         var _a, _b, _c;
         const v = d.vitals;
         if (!v) return null;
         const avg4 = (_a = v.respiratoryRateAvg) != null ? _a : v.respiratoryRate;
         if (avg4 == null || avg4 <= 0) return null;
-        const min = (_b = v.respiratoryRateMin) != null ? _b : avg4;
-        const max = (_c = v.respiratoryRateMax) != null ? _c : avg4;
-        return { min, max, avg: avg4 };
-      }
+        return { min: (_b = v.respiratoryRateMin) != null ? _b : avg4, max: (_c = v.respiratoryRateMax) != null ? _c : avg4, avg: avg4 };
+      },
+      yAxis: ({ min, max }) => ({
+        yMin: Math.min(10, Math.floor(min - 1)),
+        yMax: Math.max(25, Math.ceil(max + 1)),
+        gridStep: 5
+      }),
+      formatAxisLabel: (v) => String(v),
+      formatValue: (v) => v.toFixed(1),
+      warn: { hi: 20, color: "#ff3b30", note: "Elevated >20 brpm" },
+      stats: { lowColor: "#3bb2c1", avgColor: "#3bb2c1", highColor: "#3bb2c1" }
     };
   }
   return {
     label: "Blood Oxygen",
     unit: "%",
-    color: "#1eeaef",
-    yMin: 90,
-    yMax: 100,
-    gridStep: 2,
-    warn: { lo: 95, color: "#ff3b30", note: "Low SpO\u2082 <95%" },
+    capsuleColor: "#1eeaef",
+    padL: 40,
+    avgDotInnerLightFill: "#0a1a22",
     extract: (d) => {
       var _a, _b, _c;
       const v = d.vitals;
       if (!v) return null;
       const avg4 = (_a = v.bloodOxygenAvg) != null ? _a : v.bloodOxygenPercent;
       if (avg4 == null || avg4 <= 0) return null;
-      const min = (_b = v.bloodOxygenMin) != null ? _b : avg4;
-      const max = (_c = v.bloodOxygenMax) != null ? _c : avg4;
-      return { min, max, avg: avg4 };
-    }
+      return { min: (_b = v.bloodOxygenMin) != null ? _b : avg4, max: (_c = v.bloodOxygenMax) != null ? _c : avg4, avg: avg4 };
+    },
+    yAxis: ({ min, max }) => ({
+      yMin: Math.min(90, Math.floor(min - 1)),
+      yMax: Math.max(100, Math.ceil(max + 1)),
+      gridStep: 2
+    }),
+    formatAxisLabel: (v) => String(v),
+    formatValue: (v) => v.toFixed(1),
+    warn: { lo: 95, color: "#ff3b30", note: "Low SpO\u2082 <95%" },
+    stats: { lowColor: "#1eeaef", avgColor: "#1eeaef", highColor: "#1eeaef" }
   };
 }
 var renderOxygenRange = (ctx, data, W, H, config, theme, statsEl, hits) => {
-  var _a;
-  ctx.fillStyle = theme.bg;
-  ctx.fillRect(0, 0, W, H);
   const metric = config.metric || "blood-oxygen";
-  const spec = specFor(metric);
-  const points = data.map((d) => ({ day: d, v: spec.extract(d) }));
-  const present = points.filter((p) => p.v !== null);
-  if (!present.length) {
-    ctx.fillStyle = theme.muted;
-    ctx.font = "12px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(`No ${spec.label.toLowerCase()} data`, W / 2, H / 2);
-    return;
-  }
-  const padL = 40, padR = 16, padT = 14, padB = 24;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-  const observedMin = Math.min(...present.map((p) => p.v.min));
-  const observedMax = Math.max(...present.map((p) => p.v.max));
-  const yMin = Math.min(spec.yMin, Math.floor(observedMin - 1));
-  const yMax = Math.max(spec.yMax, Math.ceil(observedMax + 1));
-  const yRange = yMax - yMin || 1;
-  const n = points.length;
-  const xFor = (i) => padL + (n === 1 ? plotW / 2 : i / (n - 1) * plotW);
-  const yFor = (v) => padT + plotH - (v - yMin) / yRange * plotH;
-  if (spec.warn) {
-    ctx.fillStyle = hexToRgba(spec.warn.color, theme.isDark ? 0.12 : 0.08);
-    if (spec.warn.lo != null) {
-      const yThreshold = yFor(spec.warn.lo);
-      ctx.fillRect(padL, yThreshold, plotW, padT + plotH - yThreshold);
-    }
-    if (spec.warn.hi != null) {
-      const yThreshold = yFor(spec.warn.hi);
-      ctx.fillRect(padL, padT, plotW, yThreshold - padT);
-    }
-  }
-  ctx.strokeStyle = hexToRgba(theme.fg, 0.07);
-  ctx.lineWidth = 1;
-  ctx.fillStyle = theme.muted;
-  ctx.font = "9px sans-serif";
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-  const startGrid = Math.ceil(yMin / spec.gridStep) * spec.gridStep;
-  for (let v = startGrid; v <= yMax; v += spec.gridStep) {
-    const y = yFor(v);
-    ctx.beginPath();
-    ctx.moveTo(padL, y);
-    ctx.lineTo(W - padR, y);
-    ctx.stroke();
-    const label = `${v}${spec.unit === "%" ? "" : ""}`;
-    ctx.fillText(label, padL - 4, y);
-  }
-  if (spec.warn) {
-    const thresholdV = (_a = spec.warn.lo) != null ? _a : spec.warn.hi;
-    const y = yFor(thresholdV);
-    ctx.save();
-    ctx.strokeStyle = hexToRgba(spec.warn.color, 0.55);
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(padL, y);
-    ctx.lineTo(W - padR, y);
-    ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = spec.warn.color;
-    ctx.font = "9px sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(spec.warn.note, padL + 4, y - 2);
-  }
-  const capW = Math.max(4, Math.min(10, plotW / Math.max(1, n) * 0.45));
-  const capRadius = capW / 2;
-  points.forEach((p, i) => {
-    if (!p.v) return;
-    const x = xFor(i);
-    const yTop = yFor(p.v.max);
-    const yBot = yFor(p.v.min);
-    const h = Math.max(capW, yBot - yTop);
-    const grad = ctx.createLinearGradient(0, yTop, 0, yTop + h);
-    grad.addColorStop(0, hexToRgba(spec.color, 1));
-    grad.addColorStop(1, hexToRgba(spec.color, 0.55));
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.roundRect(x - capW / 2, yTop, capW, h, capRadius);
-    ctx.fill();
-    const yAvg = yFor(p.v.avg);
-    ctx.fillStyle = theme.isDark ? "#fff" : "#0a1a22";
-    ctx.beginPath();
-    ctx.arc(x, yAvg, Math.max(2, capW * 0.38), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = spec.color;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(x, yAvg, Math.max(2, capW * 0.38), 0, Math.PI * 2);
-    ctx.stroke();
-    hits.add({
-      shape: "rect",
-      x: x - capW,
-      y: yTop - 4,
-      w: capW * 2,
-      h: h + 8,
-      title: formatDate(p.day.date),
-      details: [
-        { label: "Avg", value: `${p.v.avg.toFixed(1)} ${spec.unit}` },
-        { label: "Min", value: `${p.v.min.toFixed(1)} ${spec.unit}` },
-        { label: "Max", value: `${p.v.max.toFixed(1)} ${spec.unit}` }
-      ],
-      payload: p.day
-    });
-  });
-  const labelStep = Math.max(1, Math.floor(n / 6));
-  ctx.fillStyle = theme.muted;
-  ctx.font = "9px sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  for (let i = 0; i < n; i++) {
-    if (i % labelStep !== 0 && i !== n - 1) continue;
-    const d = /* @__PURE__ */ new Date(points[i].day.date + "T00:00:00");
-    const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    ctx.fillText(label, xFor(i), H - padB + 6);
-  }
-  const mins = present.map((p) => p.v.min);
-  const maxs = present.map((p) => p.v.max);
-  const avgs = present.map((p) => p.v.avg);
-  const overallMin = Math.min(...mins);
-  const overallMax = Math.max(...maxs);
-  const overallAvg = avgs.reduce((s, v) => s + v, 0) / avgs.length;
-  statsEl.innerHTML = `
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${spec.color}">${overallMin.toFixed(1)}</div><div class="health-md-stat-label">Lowest</div></div>
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${spec.color}">${overallAvg.toFixed(1)}</div><div class="health-md-stat-label">${spec.label} Avg</div></div>
-		<div class="health-md-stat-box"><div class="health-md-stat-value" style="color:${spec.color}">${overallMax.toFixed(1)}</div><div class="health-md-stat-label">Highest</div></div>
-	`;
+  renderRangeChart(ctx, data, W, H, theme, statsEl, hits, specFor(metric));
 };
 
 // src/visualizations/index.ts
