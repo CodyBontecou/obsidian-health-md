@@ -1,3 +1,5 @@
+<img width="200" alt="CleanShot 2026-04-21 at 09 31 33@2x" src="https://github.com/user-attachments/assets/d4465c64-df4f-4bed-a48e-71ab4a3a2664" />
+
 # Health.md Visualizations
 
 An [Obsidian](https://obsidian.md) plugin that renders rich Apple Health visualizations from data files in your vault. Drop a fenced code block into any note (including a daily note) and the plugin renders an interactive canvas chart pulled from your local health data.
