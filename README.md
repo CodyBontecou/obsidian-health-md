@@ -27,6 +27,20 @@ npm run build
 
 Then copy `main.js`, `manifest.json`, and `styles.css` into your vault's plugin folder.
 
+## Preparing an Obsidian community plugin submission
+
+This repository includes a helper that validates the expected metadata and prepares a submission bundle for `obsidianmd/obsidian-releases`.
+
+```bash
+npm run prepare:submission
+```
+
+The command creates `release/obsidian-submission/<version>/` containing:
+
+- release assets (`main.js`, `manifest.json`, `versions.json`, and `styles.css` when present)
+- `community-plugin-entry.json` (copy this object into `community-plugins.json`)
+- `SUBMISSION-CHECKLIST.md` (PR/release checklist)
+
 ## Quick start
 
 1. Put your Apple Health export files in a folder inside your vault — by default the plugin looks at `Health/`.

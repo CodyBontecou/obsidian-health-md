@@ -5,7 +5,8 @@
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "node esbuild.config.mjs production"
+		"build": "node esbuild.config.mjs production",
+		"prepare:submission": "npm run build && node scripts/prepare-obsidian-submission.mjs"
 	},
 	"keywords": [],
 	"author": "Cody Bontecou",
