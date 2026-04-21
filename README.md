@@ -4,6 +4,8 @@ An [Obsidian](https://obsidian.md) plugin that renders rich Apple Health visuali
 
 Supported data formats: **JSON**, **CSV**, **Markdown frontmatter**, and **Obsidian Bases** (YAML frontmatter).
 
+Download [Health.md](https://apps.apple.com/us/app/health-md/id6757763969) on the app store to easily export and get access to your Apple Health data.
+
 ## Installation
 
 ### Manual
