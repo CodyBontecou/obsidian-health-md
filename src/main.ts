@@ -1,4 +1,12 @@
-import { App, MarkdownView, Plugin, PluginSettingTab, Setting } from "obsidian";
+import {
+	AbstractInputSuggest,
+	App,
+	MarkdownView,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	TFolder,
+} from "obsidian";
 import { ColorSchemeId, HealthMdSettings } from "./types";
 import { DataLoader } from "./data-loader";
 import { renderCodeBlock } from "./renderer";
@@ -174,6 +182,33 @@ export default class HealthMdPlugin extends Plugin {
 	}
 }
 
+class FolderInputSuggest extends AbstractInputSuggest<string> {
+	constructor(app: App, inputEl: HTMLInputElement) {
+		super(app, inputEl);
+		this.limit = 200;
+	}
+
+	private getFolderPaths(): string[] {
+		return this.app.vault
+			.getAllLoadedFiles()
+			.filter((f): f is TFolder => f instanceof TFolder)
+			.map((f) => f.path)
+			.filter((path) => path.length > 0 && path !== "/")
+			.sort((a, b) => a.localeCompare(b));
+	}
+
+	protected getSuggestions(query: string): string[] {
+		const q = query.trim().toLowerCase();
+		const folders = this.getFolderPaths();
+		if (!q) return folders;
+		return folders.filter((path) => path.toLowerCase().includes(q));
+	}
+
+	renderSuggestion(value: string, el: HTMLElement): void {
+		el.setText(value);
+	}
+}
+
 class HealthMdSettingTab extends PluginSettingTab {
 	plugin: HealthMdPlugin;
 
@@ -186,20 +221,35 @@ class HealthMdSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		const updateDataFolder = async (value: string): Promise<void> => {
+			const next = value.trim().replace(/^\/+|\/+$/g, "");
+			if (next === this.plugin.settings.dataFolder) return;
+			this.plugin.settings.dataFolder = next;
+			this.plugin.dataLoader.invalidate();
+			await this.plugin.saveSettings();
+			this.plugin.refreshViews();
+		};
+
 		new Setting(containerEl)
 			.setName("Data folder")
-			.setDesc("Path to the folder containing health data files")
-			.addText((text) =>
-				text
+			.setDesc(
+				"Path to the folder containing health data files. Start typing to pick an existing folder."
+			)
+			.addSearch((search) => {
+				search
 					.setPlaceholder("Health")
 					.setValue(this.plugin.settings.dataFolder)
 					.onChange(async (value) => {
-						this.plugin.settings.dataFolder = value.trim();
-						this.plugin.dataLoader.invalidate();
-						await this.plugin.saveSettings();
-						this.plugin.refreshViews();
-					})
-			);
+						await updateDataFolder(value);
+					});
+
+				const folderSuggest = new FolderInputSuggest(this.app, search.inputEl);
+				folderSuggest.onSelect((value) => {
+					void updateDataFolder(value);
+				});
+				search.inputEl.addEventListener("focus", () => folderSuggest.open());
+				search.inputEl.addEventListener("click", () => folderSuggest.open());
+			});
 
 		new Setting(containerEl)
 			.setName("File pattern")
@@ -221,14 +271,14 @@ class HealthMdSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Data format")
 			.setDesc(
-				"Auto-detect reads JSON, CSV, and Markdown/Bases by file extension. Or force a specific format."
+				"Auto-detect reads JSON, CSV, and Markdown/Bases by file extension. Markdown files must include YAML frontmatter (Bases-style)."
 			)
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption("auto", "Auto-detect by extension")
 					.addOption("json", "JSON")
 					.addOption("csv", "CSV")
-					.addOption("markdown", "Markdown (frontmatter)")
+					.addOption("markdown", "Markdown (YAML frontmatter required)")
 					.addOption("bases", "Obsidian Bases (YAML frontmatter)")
 					.setValue(this.plugin.settings.dataFormat)
 					.onChange(async (value) => {

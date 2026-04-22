@@ -3878,7 +3878,7 @@ async function renderCodeBlock(plugin, source, el, ctx) {
     const allData2 = await plugin.dataLoader.load();
     if (!allData2.length) {
       el.createEl("p", {
-        text: `No health data found in ${plugin.settings.dataFolder}/`
+        text: `No health data found in ${plugin.settings.dataFolder}/. Supported formats: JSON, CSV, or Markdown/Bases with YAML frontmatter.`
       });
       return;
     }
@@ -3907,7 +3907,7 @@ async function renderCodeBlock(plugin, source, el, ctx) {
   const allData = await plugin.dataLoader.load();
   if (!allData.length) {
     el.createEl("p", {
-      text: `No health data found in ${plugin.settings.dataFolder}/`
+      text: `No health data found in ${plugin.settings.dataFolder}/. Supported formats: JSON, CSV, or Markdown/Bases with YAML frontmatter.`
     });
     return;
   }
@@ -4147,6 +4147,24 @@ var HealthMdPlugin = class extends import_obsidian3.Plugin {
     });
   }
 };
+var FolderInputSuggest = class extends import_obsidian3.AbstractInputSuggest {
+  constructor(app, inputEl) {
+    super(app, inputEl);
+    this.limit = 200;
+  }
+  getFolderPaths() {
+    return this.app.vault.getAllLoadedFiles().filter((f) => f instanceof import_obsidian3.TFolder).map((f) => f.path).filter((path) => path.length > 0 && path !== "/").sort((a, b) => a.localeCompare(b));
+  }
+  getSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    const folders = this.getFolderPaths();
+    if (!q) return folders;
+    return folders.filter((path) => path.toLowerCase().includes(q));
+  }
+  renderSuggestion(value, el) {
+    el.setText(value);
+  }
+};
 var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -4155,14 +4173,27 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian3.Setting(containerEl).setName("Data folder").setDesc("Path to the folder containing health data files").addText(
-      (text) => text.setPlaceholder("Health").setValue(this.plugin.settings.dataFolder).onChange(async (value) => {
-        this.plugin.settings.dataFolder = value.trim();
-        this.plugin.dataLoader.invalidate();
-        await this.plugin.saveSettings();
-        this.plugin.refreshViews();
-      })
-    );
+    const updateDataFolder = async (value) => {
+      const next = value.trim().replace(/^\/+|\/+$/g, "");
+      if (next === this.plugin.settings.dataFolder) return;
+      this.plugin.settings.dataFolder = next;
+      this.plugin.dataLoader.invalidate();
+      await this.plugin.saveSettings();
+      this.plugin.refreshViews();
+    };
+    new import_obsidian3.Setting(containerEl).setName("Data folder").setDesc(
+      "Path to the folder containing health data files. Start typing to pick an existing folder."
+    ).addSearch((search) => {
+      search.setPlaceholder("Health").setValue(this.plugin.settings.dataFolder).onChange(async (value) => {
+        await updateDataFolder(value);
+      });
+      const folderSuggest = new FolderInputSuggest(this.app, search.inputEl);
+      folderSuggest.onSelect((value) => {
+        void updateDataFolder(value);
+      });
+      search.inputEl.addEventListener("focus", () => folderSuggest.open());
+      search.inputEl.addEventListener("click", () => folderSuggest.open());
+    });
     new import_obsidian3.Setting(containerEl).setName("File pattern").setDesc(
       "Glob pattern to match files (e.g. *.json, 2026-*.md, health-*.csv). Use * for all supported files."
     ).addText(
@@ -4174,9 +4205,9 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
       })
     );
     new import_obsidian3.Setting(containerEl).setName("Data format").setDesc(
-      "Auto-detect reads JSON, CSV, and Markdown/Bases by file extension. Or force a specific format."
+      "Auto-detect reads JSON, CSV, and Markdown/Bases by file extension. Markdown files must include YAML frontmatter (Bases-style)."
     ).addDropdown(
-      (dropdown) => dropdown.addOption("auto", "Auto-detect by extension").addOption("json", "JSON").addOption("csv", "CSV").addOption("markdown", "Markdown (frontmatter)").addOption("bases", "Obsidian Bases (YAML frontmatter)").setValue(this.plugin.settings.dataFormat).onChange(async (value) => {
+      (dropdown) => dropdown.addOption("auto", "Auto-detect by extension").addOption("json", "JSON").addOption("csv", "CSV").addOption("markdown", "Markdown (YAML frontmatter required)").addOption("bases", "Obsidian Bases (YAML frontmatter)").setValue(this.plugin.settings.dataFormat).onChange(async (value) => {
         this.plugin.settings.dataFormat = value;
         this.plugin.dataLoader.invalidate();
         await this.plugin.saveSettings();

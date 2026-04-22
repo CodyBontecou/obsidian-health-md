@@ -62,9 +62,9 @@ Open **Settings → Health.md Visualizations**:
 
 | Setting | Description |
 | --- | --- |
-| **Data folder** | Path inside the vault where the plugin looks for health files. Default `Health`. |
+| **Data folder** | Path inside the vault where the plugin looks for health files. Default `Health`. Includes folder autocomplete in settings to reduce path typos. |
 | **File pattern** | Glob to filter which files in that folder are loaded. Examples: `*` (all supported), `*.json`, `2026-*.md`, `health-*.csv`. |
-| **Data format** | `auto` (detect by file extension), `json`, `csv`, `markdown`, or `bases`. |
+| **Data format** | `auto` (detect by file extension), `json`, `csv`, `markdown`, or `bases`. Markdown support requires YAML frontmatter (Bases-style). |
 | **Theme** | `auto` matches Obsidian, or force `dark` / `light`. |
 | **Default width** | Default canvas width in pixels (charts shrink to container width). |
 | **Default height** | Default canvas height in pixels. |
@@ -274,7 +274,7 @@ The plugin auto-detects the data format from the file extension. Each file shoul
 
 - `.json` — A `HealthDay` object (see `src/types.ts` for the full shape).
 - `.csv` — Section headers (`Heart`, `Sleep`, `Vitals`, `Activity`, `Mobility`, …) followed by `Metric,Value` rows. See `src/parsers/csv-parser.ts`.
-- `.md` — A markdown file with YAML frontmatter that uses fields like `heart_rate_avg`, `sleep_deep`, `steps`, etc. See `src/parsers/markdown-parser.ts`. This format is compatible with Obsidian Bases.
+- `.md` — A markdown file with YAML frontmatter that uses fields like `heart_rate_avg`, `sleep_deep`, `steps`, etc. **Plain markdown without frontmatter is not parsed.** See `src/parsers/markdown-parser.ts`. This format is compatible with Obsidian Bases.
 
 The top-level `date` field on each day must be a `YYYY-MM-DD` ISO date — the date filter does fast lexicographic comparisons against this field.
 

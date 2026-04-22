@@ -479,7 +479,7 @@ export async function renderCodeBlock(
 		const allData = await plugin.dataLoader.load();
 		if (!allData.length) {
 			el.createEl("p", {
-				text: `No health data found in ${plugin.settings.dataFolder}/`,
+				text: `No health data found in ${plugin.settings.dataFolder}/. Supported formats: JSON, CSV, or Markdown/Bases with YAML frontmatter.`,
 			});
 			return;
 		}
@@ -514,7 +514,7 @@ export async function renderCodeBlock(
 	const allData = await plugin.dataLoader.load();
 	if (!allData.length) {
 		el.createEl("p", {
-			text: `No health data found in ${plugin.settings.dataFolder}/`,
+			text: `No health data found in ${plugin.settings.dataFolder}/. Supported formats: JSON, CSV, or Markdown/Bases with YAML frontmatter.`,
 		});
 		return;
 	}
