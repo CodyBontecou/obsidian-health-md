@@ -4390,7 +4390,7 @@ var HealthMdSettingTab = class extends import_obsidian3.PluginSettingTab {
       search.inputEl.addEventListener("click", () => folderSuggest.open());
     });
     new import_obsidian3.Setting(containerEl).setName("File pattern").setDesc(
-      "Glob pattern to match files (for example: *.json, 2026-*.md, health-*.CSV); use * to include all supported files."
+      "Glob pattern to match files. Use * to include all supported files."
     ).addText(
       (text) => text.setPlaceholder("*").setValue(this.plugin.settings.filePattern).onChange(async (value) => {
         this.plugin.settings.filePattern = value.trim();

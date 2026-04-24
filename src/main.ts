@@ -254,7 +254,7 @@ class HealthMdSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("File pattern")
 			.setDesc(
-				"Glob pattern to match files (for example: *.json, 2026-*.md, health-*.CSV); use * to include all supported files."
+				"Glob pattern to match files. Use * to include all supported files."
 			)
 			.addText((text) =>
 				text
