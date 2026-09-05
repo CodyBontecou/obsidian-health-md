@@ -46,7 +46,12 @@ jobs:
           package_version="$(node -p "require('./package.json').version")"
           min_app_version="$(node -p "require('./manifest.json').minAppVersion")"
           versions_min_app="$(node -p "require('./versions.json')[require('./manifest.json').version]")"
-          tag_version="${RELEASE_REF#v}"
+
+          if [[ "$RELEASE_REF" == v* ]]; then
+            echo "Release tag ($RELEASE_REF) must NOT use a 'v' prefix. Obsidian requires the tag to exactly match manifest.json's version, e.g. '$RELEASE_REF' should be '${RELEASE_REF#v}'." >&2
+            exit 1
+          fi
+          tag_version="$RELEASE_REF"
 
           if [ "$manifest_version" != "$package_version" ]; then
             echo "manifest.json version ($manifest_version) does not match package.json ($package_version)" >&2
